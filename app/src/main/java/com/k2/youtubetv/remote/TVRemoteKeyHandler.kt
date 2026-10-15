@@ -110,6 +110,12 @@ class TVRemoteKeyHandler(
                     } catch (e) { return false; }
                 }
 
+                function fireKey(t, type, key, code, kc) {
+                    try {
+                        t.dispatchEvent(new KeyboardEvent(type, { key: key, code: code, keyCode: kc, which: kc, bubbles: true, cancelable: true, composed: true }));
+                    } catch (e) {}
+                }
+
                 var OVERLAY_SEL = 'dialog, [role="dialog"], [aria-modal="true"], .ytp-popup, .ytp-settings-menu, .ytp-panel, .ytp-contextmenu, .ytp-menu, ytlr-dialog-renderer, ytlr-fullscreen-metadata-renderer, tp-yt-paper-dialog, tp-yt-paper-menu';
                 var found = null;
                 var foundVia = '';
@@ -155,15 +161,10 @@ class TVRemoteKeyHandler(
                 }
 
                 if (found) {
-                    // Escalating close attempts. NEVER pause/mute/stop the video here.
+                    // Close the overlay menu without touching video playback
                     var n = (window._k2MenuBackCount || 0) + 1;
                     window._k2MenuBackCount = n;
                     var target = document.activeElement || found;
-                    function fireKey(t, type, key, code, kc) {
-                        try {
-                            t.dispatchEvent(new KeyboardEvent(type, { key: key, code: code, keyCode: kc, which: kc, bubbles: true, cancelable: true, composed: true }));
-                        } catch (e) {}
-                    }
                     var closer = null;
                     try {
                         closer = found.querySelector ? found.querySelector('[aria-label*="닫기"], [aria-label*="Close"], [aria-label*="close"], [aria-label*="뒤로"], [aria-label*="Back"], [aria-label*="back"], [class*="close"], [class*="Close"], [class*="back-button"], [class*="BackButton"]') : null;
@@ -181,108 +182,71 @@ class TVRemoteKeyHandler(
                 }
                 window._k2MenuBackCount = 0;
 
-                // 2. If NO overlay is open, we are navigating AWAY from video or screen:
-                // Stop and mute video to prevent background audio leak
-                var isVideoPlaying = false;
+                // 2. Check if a video is active or in Watch screen
+                var isVideoActive = false;
                 var vids = document.querySelectorAll('video');
                 for (var i = 0; i < vids.length; i++) {
-                    if (!vids[i].paused || vids[i].currentTime > 0) {
-                        isVideoPlaying = true;
+                    if (!vids[i].paused || vids[i].currentTime > 0 || vids[i].readyState >= 1) {
+                        isVideoActive = true;
                     }
-                    try {
-                        vids[i].pause();
-                        vids[i].muted = true;
-                    } catch (e) {}
                 }
                 var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
-                if (player) {
-                    try { player.stopVideo(); } catch (e) {}
-                    try { player.pauseVideo(); } catch (e) {}
-                }
-
-                // 3. Leave the watch screen with EXACTLY ONE navigation step.
-                // Priority: strict app back button (router-aware) -> remembered
-                // browse URL (deterministic return to the list) -> single history
-                // step. Stacking actions overshoots to the account picker.
-                var backBtn = null;
-                try {
-                    var _cands = document.querySelectorAll('.yt-tv-navigation-back-button, button[aria-label*="뒤로"], button[aria-label*="Back"], button[aria-label*="back"]');
-                    for (var bi = 0; bi < _cands.length; bi++) {
-                        if (k2Visible(_cands[bi])) { backBtn = _cands[bi]; break; }
+                if (player && typeof player.getPlayerState === 'function') {
+                    var s = player.getPlayerState();
+                    if (s === 1 || s === 2 || s === 3) { // 1: playing, 2: paused, 3: buffering
+                        isVideoActive = true;
                     }
-                } catch (e5) {}
-                // Smart fallback: visible back-named button outside account/profile areas.
-                if (!backBtn) {
-                    try {
-                        var _btns = document.getElementsByTagName('button');
-                        for (var sj = 0; sj < _btns.length; sj++) {
-                            var _b = _btns[sj];
-                            var _nm = '';
-                            try { _nm = (_b.getAttribute('aria-label') || _b.getAttribute('title') || _b.textContent || ''); } catch (e10) {}
-                            if (!/뒤로|back/i.test(_nm)) continue;
-                            if (!k2Visible(_b)) continue;
-                            var _anc = _b, _inAcct = false, _g = 0;
-                            while (_anc && _anc !== document && _g < 8) {
-                                _g++;
-                                var _hh = k2ClassOf(_anc) + ' ' + (_anc.id || '');
-                                if (/account|profile|avatar|signin|login/i.test(_hh)) { _inAcct = true; break; }
-                                _anc = _anc.parentElement;
-                            }
-                            if (!_inAcct) { backBtn = _b; break; }
-                        }
-                    } catch (e7) {}
                 }
-                if (backBtn) {
-                    var _desc = '';
-                    try { _desc = (backBtn.tagName || '?') + '.' + k2ClassOf(backBtn).split(' ').slice(0, 2).join('.') + '("' + (((backBtn.getAttribute && backBtn.getAttribute('aria-label')) || '').substring(0, 24)) + '")'; } catch (e8) {}
-                    // Activate via the trusted key path (real DPAD_CENTER dispatched
-                    // from the app side): a synthetic .click() may be ignored by the
-                    // app, leaving navigation to a history stack that no longer
-                    // contains the browse list (overshoot to the account picker).
-                    var _fok = false;
-                    try { backBtn.focus(); _fok = (document.activeElement === backBtn); } catch (e6) {}
-                    if (window._k2NcHref === window.location.href) window._k2NcCount = (window._k2NcCount || 0) + 1;
-                    else { window._k2NcHref = window.location.href; window._k2NcCount = 0; }
-                    if (_fok && window._k2NcCount < 2) {
-                        return 'NEEDS_CENTER:' + _desc;
+                var curHref = window.location.href;
+                if (curHref.indexOf('/watch') !== -1 || (window.location.hash && window.location.hash.indexOf('watch') !== -1)) {
+                    isVideoActive = true;
+                }
+
+                if (isVideoActive) {
+                    // STOP and MUTE video immediately to prevent background audio leak
+                    for (var j = 0; j < vids.length; j++) {
+                        try {
+                            vids[j].pause();
+                            vids[j].muted = true;
+                        } catch (e5) {}
                     }
-                    // Focus failed or center-press proved futile: fall through to
-                    // remembered-URL / history navigation below.
+                    if (player) {
+                        try { player.stopVideo(); } catch (e6) {}
+                        try { player.pauseVideo(); } catch (e7) {}
+                    }
+
+                    // Exit Watch screen by firing pure Escape / GoBack keys to Kabuki router
+                    var escTarget = document.activeElement || document.body;
+                    fireKey(escTarget, 'keydown', 'Escape', 'Escape', 27);
+                    fireKey(escTarget, 'keyup', 'Escape', 'Escape', 27);
+                    try { document.documentElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true, composed: true })); } catch (e8) {}
+                    fireKey(escTarget, 'keydown', 'GoBack', 'GoBack', 461);
+                    fireKey(escTarget, 'keydown', 'Backspace', 'Backspace', 8);
+
+                    // NEVER call window.history.back() or location.replace() here,
+                    // as it overshoots back to the startup account picker screen!
+                    return 'NEEDS_ESCAPE:video_stopped';
                 }
 
-                if (window._k2LastBrowse && window._k2LastBrowse !== window.location.href) {
-                    try { window.location.replace(window._k2LastBrowse); } catch (e9) {}
-                    return 'HANDLED_VIDEO:browse-url';
-                }
-
-                if (window.location.href.indexOf('/watch') !== -1 || isVideoPlaying) {
-                    window.history.back();
-                    return 'HANDLED_VIDEO:history:len=' + window.history.length;
-                }
-
-                if (window.history.length > 1) {
-                    window.history.back();
-                    return 'HANDLED_HISTORY:len=' + window.history.length;
-                }
-
-                return 'ROOT:len=' + window.history.length;
+                // 3. At browse / home screen: do not use history.back() (which reverts to account selector)
+                var homeTarget = document.activeElement || document.body;
+                fireKey(homeTarget, 'keydown', 'Escape', 'Escape', 27);
+                fireKey(homeTarget, 'keyup', 'Escape', 'Escape', 27);
+                return 'ROOT_HOME';
             })();
         """.trimIndent()
 
         webView.evaluateJavascript(script) { result ->
             val cleanedResult = result?.replace("\"", "") ?: ""
             Log.d(TAG, "Back navigation result: $cleanedResult")
-            if (cleanedResult.startsWith("NEEDS_CENTER")) {
-                // Trusted activation: real DPAD_CENTER key down+up into the WebView
-                // so the app's own key system presses the focused back button.
+            if (cleanedResult.startsWith("NEEDS_ESCAPE") || cleanedResult.startsWith("HANDLED_MENU")) {
+                // Dispatch real trusted Escape key to WebView to ensure Chromium Blink engine processes it
+                webView.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ESCAPE))
+                webView.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ESCAPE))
+                lastBackPressTime = 0L
+            } else if (cleanedResult.startsWith("NEEDS_CENTER")) {
                 webView.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER))
                 webView.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER))
-                lastBackPressTime = 0L
-            } else if (cleanedResult.startsWith("HANDLED_MENU") || cleanedResult.startsWith("HANDLED_VIDEO") || cleanedResult.startsWith("HANDLED_HISTORY")) {
-                // Successfully handled navigation or closed menu, reset timer
-                lastBackPressTime = 0L
-            } else if (webView.canGoBack()) {
-                webView.goBack()
                 lastBackPressTime = 0L
             } else {
                 // At the root home screen, double back to exit app

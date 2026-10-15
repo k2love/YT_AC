@@ -655,32 +655,11 @@
     }
 
     // =========================================================================
-    // 5d. Browse-URL memory for reliable Back-from-watch navigation.
-    // The SPA history stack does not always contain the browse list (entries
-    // get replaced, or playback started without one), so history.back() can
-    // overshoot to the account picker. Remember the last non-watch,
-    // non-account URL; the back handler navigates straight back to it.
+    // 5d. Browse-URL memory: Neutralized to prevent overshooting to account picker.
+    // YouTube TV manages its view stack internally (Kabuki router); forcing
+    // location.replace() reloads the app back into ?launch=menu (account picker).
     // =========================================================================
-    var _k2PrevUrl = location.href;
     window._k2LastBrowse = null;
-
-    setInterval(function() {
-        try {
-            var h = location.href;
-            var watchLike = h.indexOf('/watch') !== -1;
-            var acctLike = h.indexOf('account') !== -1 || h.indexOf('signin') !== -1;
-            if (h !== _k2PrevUrl) {
-                var pw = _k2PrevUrl.indexOf('/watch') !== -1;
-                var pa = _k2PrevUrl.indexOf('account') !== -1 || _k2PrevUrl.indexOf('signin') !== -1;
-                if (!pw && !pa) {
-                    window._k2LastBrowse = _k2PrevUrl;
-                }
-                _k2PrevUrl = h;
-            } else if (!watchLike && !acctLike) {
-                window._k2LastBrowse = h;
-            }
-        } catch (e) {}
-    }, 1000);
 
     // =========================================================================
     // 5e. Quality-submenu spy (READ-ONLY) + DOM-level UHD row injection.
