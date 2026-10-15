@@ -1,0 +1,21 @@
+# 작업 보드: YouTube TV Clone 프로젝트 독립 이관 및 GitHub 릴리즈 준비
+
+- [ ] 1. 사전 준비 및 계획 수립 <!-- id: 0 -->
+    - [x] 기존 프로젝트(`YouTubeTVClone`) 빌드 상태 및 의존성 확인
+    - [x] 대상 디렉토리(`E:\AI_Projects\## YouTube TV for Android Clone`) 확인
+- [ ] 2. 독립 디렉토리 생성 및 프로젝트 이관 <!-- id: 1 -->
+    - [ ] `E:\AI_Projects\## YouTube TV for Android Clone` 폴더 생성
+    - [ ] 안드로이드 프로젝트 전체 소스 및 gradle wrapper 복사/이관
+    - [ ] 문서 및 역공학 분석 데이터(`.agents/`) 이관
+- [ ] 3. APK 출력 파일명 `YT_TV_AC.apk` 적용 <!-- id: 2 -->
+    - [ ] `app/build.gradle.kts`에 `outputFileName = "YT_TV_AC.apk"` 설정 추가
+    - [ ] 빌드 실행 (`.\gradlew.bat assembleDebug`) 및 `YT_TV_AC.apk` 생성 검증
+- [ ] 4. GitHub 저장소 배포 준비 <!-- id: 3 -->
+    - [ ] 고도화된 `.gitignore` 작성 (빌드 부산물 제외, 필수 소스 보존)
+    - [ ] 전문적이고 상세한 `README.md` 작성 (기능 소개, 아키텍처, 빌드/설치 가이드)
+    - [ ] `git init` 저장소 초기화 및 첫 커밋 생성
+    - [ ] 기본 브랜치 `main` 설정
+- [ ] 5. 검증 및 결과 보고 <!-- id: 4 -->
+    - [ ] 신규 독립 디렉토리에서의 빌드 무결성 확인
+    - [ ] Git 상태 및 커밋 로그 확인
+    - [ ] 결과 리포트(`walkthrough_standalone_migration_and_github_20261016.md`) 작성 및 사용자 보고
