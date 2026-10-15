@@ -43,9 +43,11 @@ class MainActivity : AppCompatActivity() {
 
         router = PlatformServiceRouter(applicationContext) { binding.webView }
         jsBridge = CobaltJsBridge(router)
-        remoteKeyHandler = TVRemoteKeyHandler(this) { binding.webView }
-        googleAuthManager = GoogleAuthManager(applicationContext, router.syncAuthService)
         appUpdateManager = AppUpdateManager(this)
+        remoteKeyHandler = TVRemoteKeyHandler(this, { binding.webView }) {
+            appUpdateManager.showSettingsDialog()
+        }
+        googleAuthManager = GoogleAuthManager(applicationContext, router.syncAuthService)
 
         setupWebView()
         loadTargetUrl(intent)
@@ -62,6 +64,14 @@ class MainActivity : AppCompatActivity() {
             webViewClient = TVWebViewClient(applicationContext)
             this@apply.webChromeClient = this@MainActivity.webChromeClient
             addJavascriptInterface(jsBridge, CobaltJsBridge.INTERFACE_NAME)
+            addJavascriptInterface(object {
+                @android.webkit.JavascriptInterface
+                fun checkAppUpdate() {
+                    runOnUiThread {
+                        appUpdateManager.showSettingsDialog()
+                    }
+                }
+            }, "YT_TV_APP")
         }
     }
 

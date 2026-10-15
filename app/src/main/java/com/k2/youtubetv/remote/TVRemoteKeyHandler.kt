@@ -9,7 +9,8 @@ import android.widget.Toast
 
 class TVRemoteKeyHandler(
     private val activity: Activity,
-    private val webViewProvider: () -> WebView?
+    private val webViewProvider: () -> WebView?,
+    private val onOpenSettings: (() -> Unit)? = null
 ) {
 
     companion object {
@@ -30,6 +31,12 @@ class TVRemoteKeyHandler(
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> {
                 handleBackAction(webView)
                 true
+            }
+            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_SETTINGS -> {
+                if (onOpenSettings != null) {
+                    onOpenSettings.invoke()
+                    true
+                } else false
             }
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                 dispatchJsKeyEvent(webView, "k", 75) // YouTube toggle play/pause shortcut

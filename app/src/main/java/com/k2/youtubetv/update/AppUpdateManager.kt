@@ -29,6 +29,12 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
+sealed class ReleaseFetchResult {
+    data class Success(val updateInfo: UpdateInfo) : ReleaseFetchResult()
+    object NoRelease : ReleaseFetchResult()
+    data class Error(val code: Int, val message: String) : ReleaseFetchResult()
+}
+
 class AppUpdateManager(private val activity: Activity) {
 
     companion object {
@@ -43,32 +49,103 @@ class AppUpdateManager(private val activity: Activity) {
         .build()
 
     /**
+     * Android TV 전용 설정 및 앱 정보 다이얼로그 표시
+     */
+    fun showSettingsDialog() {
+        if (activity.isFinishing || activity.isDestroyed) return
+
+        val msg = StringBuilder()
+        msg.append("[앱 정보]\n")
+        msg.append("• 현재 설치 버전: v${BuildConfig.VERSION_NAME}\n")
+        msg.append("• 패키지 명칭: ${activity.packageName}\n")
+        msg.append("• GitHub 저장소: https://github.com/$GITHUB_REPO\n\n")
+        msg.append("[활성화된 고급 기능]\n")
+        msg.append("• 제로-애드(Zero-Ad) 무제한 광고 차단: 정상 작동\n")
+        msg.append("• 4K / 8K 고해상도 언락 엔진: 정상 작동\n")
+        msg.append("• 순정 OLED 투명 UI & 리모컨 네비게이션: 정상 작동\n\n")
+        msg.append("지금 최신 버전이 있는지 확인하시겠습니까?")
+
+        val dialog = AlertDialog.Builder(activity)
+            .setTitle("YouTube TV Clone 설정 및 정보")
+            .setMessage(msg.toString())
+            .setPositiveButton("지금 업데이트 확인") { _, _ ->
+                checkForUpdates(isManualCheck = true)
+            }
+            .setNegativeButton("닫기") { d, _ ->
+                d.dismiss()
+            }
+            .setCancelable(true)
+            .create()
+
+        dialog.show()
+
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.apply {
+            isFocusable = true
+            isFocusableInTouchMode = true
+            requestFocus()
+        }
+    }
+
+    /**
      * GitHub 최신 릴리즈 정보를 비동기로 조회하고 업데이트가 있을 경우 안내 다이얼로그 표시
      */
     fun checkForUpdates(isManualCheck: Boolean = false) {
+        if (isManualCheck) {
+            Toast.makeText(activity, "최신 업데이트 정보를 확인하는 중...", Toast.LENGTH_SHORT).show()
+        }
+
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val updateInfo = fetchLatestReleaseInfo()
-                if (updateInfo != null && VersionComparator.isNewerVersion(updateInfo.tagName, BuildConfig.VERSION_NAME)) {
-                    Log.i(TAG, "New update available: ${updateInfo.tagName} (Current: ${BuildConfig.VERSION_NAME})")
-                    withContext(Dispatchers.Main) {
-                        if (!activity.isFinishing && !activity.isDestroyed) {
-                            showUpdateDialog(updateInfo)
+                val result = fetchLatestReleaseInfo()
+                withContext(Dispatchers.Main) {
+                    if (activity.isFinishing || activity.isDestroyed) return@withContext
+
+                    when (result) {
+                        is ReleaseFetchResult.Success -> {
+                            val updateInfo = result.updateInfo
+                            if (VersionComparator.isNewerVersion(updateInfo.tagName, BuildConfig.VERSION_NAME)) {
+                                Log.i(TAG, "New update available: ${updateInfo.tagName} (Current: ${BuildConfig.VERSION_NAME})")
+                                showUpdateDialog(updateInfo)
+                            } else {
+                                Log.d(TAG, "App is up to date (Current: ${BuildConfig.VERSION_NAME})")
+                                if (isManualCheck) {
+                                    showNoticeDialog(
+                                        title = "최신 버전 사용 중",
+                                        message = "현재 설치된 버전(v${BuildConfig.VERSION_NAME})이 최신 버전입니다.\n\n새로운 버전이 출시되면 자동으로 감지됩니다."
+                                    )
+                                }
+                            }
                         }
-                    }
-                } else {
-                    Log.d(TAG, "App is up to date (Current: ${BuildConfig.VERSION_NAME})")
-                    if (isManualCheck) {
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(activity, "현재 최신 버전을 사용 중입니다. (${BuildConfig.VERSION_NAME})", Toast.LENGTH_SHORT).show()
+                        is ReleaseFetchResult.NoRelease -> {
+                            Log.d(TAG, "No releases published yet on GitHub repository")
+                            if (isManualCheck) {
+                                showNoticeDialog(
+                                    title = "릴리즈 확인 안내",
+                                    message = "현재 GitHub 저장소($GITHUB_REPO)에 발행된 릴리즈가 없습니다.\n\n현재 설치된 버전(v${BuildConfig.VERSION_NAME})이 최신 상태입니다."
+                                )
+                            }
+                        }
+                        is ReleaseFetchResult.Error -> {
+                            Log.w(TAG, "Failed to check for updates: HTTP ${result.code} - ${result.message}")
+                            if (isManualCheck) {
+                                showNoticeDialog(
+                                    title = "업데이트 확인 실패",
+                                    message = "업데이트 정보를 가져올 수 없습니다.\n인터넷 연결을 확인해주세요. (HTTP ${result.code})"
+                                )
+                            }
                         }
                     }
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to check for updates: ${e.message}")
+                Log.w(TAG, "Exception checking for updates: ${e.message}")
                 if (isManualCheck) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(activity, "업데이트 확인 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
+                        if (!activity.isFinishing && !activity.isDestroyed) {
+                            showNoticeDialog(
+                                title = "업데이트 확인 실패",
+                                message = "네트워크 통신 중 오류가 발생했습니다: ${e.localizedMessage ?: e.message}"
+                            )
+                        }
                     }
                 }
             }
@@ -76,9 +153,30 @@ class AppUpdateManager(private val activity: Activity) {
     }
 
     /**
+     * 단순 정보 안내 다이얼로그 (수동 확인 피드백용)
+     */
+    private fun showNoticeDialog(title: String, message: String) {
+        val dialog = AlertDialog.Builder(activity)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("확인") { d, _ ->
+                d.dismiss()
+            }
+            .setCancelable(true)
+            .create()
+
+        dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.apply {
+            isFocusable = true
+            isFocusableInTouchMode = true
+            requestFocus()
+        }
+    }
+
+    /**
      * GitHub API를 통해 최신 릴리즈 정보 파싱
      */
-    private fun fetchLatestReleaseInfo(): UpdateInfo? {
+    private fun fetchLatestReleaseInfo(): ReleaseFetchResult {
         val request = Request.Builder()
             .url(GITHUB_API_URL)
             .header("Accept", "application/vnd.github.v3+json")
@@ -86,15 +184,21 @@ class AppUpdateManager(private val activity: Activity) {
             .build()
 
         val response = httpClient.newCall(request).execute()
+        if (response.code == 404) {
+            return ReleaseFetchResult.NoRelease
+        }
         if (!response.isSuccessful) {
-            Log.w(TAG, "GitHub API returned code: ${response.code}")
-            return null
+            return ReleaseFetchResult.Error(response.code, response.message)
         }
 
-        val responseBody = response.body?.string() ?: return null
+        val responseBody = response.body?.string() ?: return ReleaseFetchResult.Error(500, "Empty response body")
         val json = JSONObject(responseBody)
 
         val tagName = json.optString("tag_name", "")
+        if (tagName.isBlank()) {
+            return ReleaseFetchResult.NoRelease
+        }
+
         val title = json.optString("name", tagName)
         val body = json.optString("body", "")
         val htmlUrl = json.optString("html_url", "https://github.com/$GITHUB_REPO/releases")
@@ -120,13 +224,15 @@ class AppUpdateManager(private val activity: Activity) {
         }
 
         val versionName = tagName.removePrefix("v").removePrefix("V")
-        return UpdateInfo(
-            tagName = tagName,
-            versionName = versionName,
-            title = title,
-            changelog = body,
-            downloadUrl = apkDownloadUrl,
-            apkSize = apkSize
+        return ReleaseFetchResult.Success(
+            UpdateInfo(
+                tagName = tagName,
+                versionName = versionName,
+                title = title,
+                changelog = body,
+                downloadUrl = apkDownloadUrl,
+                apkSize = apkSize
+            )
         )
     }
 
@@ -282,7 +388,6 @@ class AppUpdateManager(private val activity: Activity) {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (!activity.packageManager.canRequestPackageInstalls()) {
-                    // 미확인 앱 설치 권한 요청 안내
                     Toast.makeText(activity, "앱 업데이트를 위해 설치 권한 승인이 필요합니다.", Toast.LENGTH_LONG).show()
                     val permissionIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
                         data = Uri.parse("package:${activity.packageName}")

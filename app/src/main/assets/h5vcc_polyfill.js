@@ -847,5 +847,63 @@
         };
     }
 
+    // =========================================================================
+    // 7. YouTube TV Settings Screen Update Widget Injector
+    // Injects an "App Info & Update" card into the settings menu
+    // =========================================================================
+    function k2InjectSettingsUpdateCard() {
+        try {
+            var isSettings = window.location.hash.indexOf('settings') !== -1 ||
+                             window.location.href.indexOf('/settings') !== -1 ||
+                             !!document.querySelector('[role="menu"][aria-label*="설정"], [role="menu"][aria-label*="Settings"], ytlr-settings-category-renderer');
+            if (!isSettings) return;
+
+            if (document.getElementById('yt-ac-settings-update-banner')) return;
+
+            // Find an optimal settings container
+            var container = document.querySelector('ytlr-settings-category-renderer, [role="menu"], #settings-content, .settings-container, #container');
+            if (!container) return;
+
+            var card = document.createElement('div');
+            card.id = 'yt-ac-settings-update-banner';
+            card.setAttribute('tabindex', '0');
+            card.setAttribute('role', 'button');
+            card.setAttribute('aria-label', 'YT_TV_AC 앱 정보 및 업데이트 확인');
+            card.style.cssText = 'margin: 16px 24px; padding: 18px 24px; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.2); border-radius: 12px; cursor: pointer; outline: none; transition: all 0.2s;';
+
+            card.innerHTML = '<div style="font-size: 20px; font-weight: bold; color: #FFFFFF; display: flex; align-items: center; gap: 8px;">🚀 YT_TV_AC 설정 및 최신 업데이트 확인</div>' +
+                             '<div style="font-size: 14px; color: #AAAAAA; margin-top: 6px;">무제한 Zero-Ad · 4K/8K 언락 · 현재 버전: v1.0.0 (리모컨 선택 시 업데이트 확인)</div>';
+
+            card.addEventListener('focus', function() {
+                card.style.background = 'rgba(255,255,255,0.2)';
+                card.style.borderColor = '#3EA6FF';
+                card.style.transform = 'scale(1.02)';
+            });
+            card.addEventListener('blur', function() {
+                card.style.background = 'rgba(255,255,255,0.08)';
+                card.style.borderColor = 'rgba(255,255,255,0.2)';
+                card.style.transform = 'scale(1)';
+            });
+
+            function triggerCheck() {
+                if (window.YT_TV_APP && typeof window.YT_TV_APP.checkAppUpdate === 'function') {
+                    window.YT_TV_APP.checkAppUpdate();
+                }
+            }
+
+            card.addEventListener('click', triggerCheck);
+            card.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.keyCode === 13) {
+                    triggerCheck();
+                }
+            });
+
+            container.insertBefore(card, container.firstChild);
+            console.log('[ZeroAd] Settings update card injected successfully.');
+        } catch (e) {}
+    }
+
+    setInterval(k2InjectSettingsUpdateCard, 1500);
+
     console.log("[ZeroAd] Ultra-Clean Zero-Ad Engine v8 fully engaged.");
 })();
