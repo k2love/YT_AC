@@ -13,6 +13,7 @@ import com.k2.youtubetv.bridge.CobaltJsBridge
 import com.k2.youtubetv.bridge.PlatformServiceRouter
 import com.k2.youtubetv.databinding.ActivityMainBinding
 import com.k2.youtubetv.remote.TVRemoteKeyHandler
+import com.k2.youtubetv.update.AppUpdateManager
 import com.k2.youtubetv.webview.TVWebChromeClient
 import com.k2.youtubetv.webview.TVWebViewClient
 import kotlinx.coroutines.launch
@@ -30,6 +31,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var remoteKeyHandler: TVRemoteKeyHandler
     private lateinit var webChromeClient: TVWebChromeClient
     private lateinit var googleAuthManager: GoogleAuthManager
+    private lateinit var appUpdateManager: AppUpdateManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,12 +45,14 @@ class MainActivity : AppCompatActivity() {
         jsBridge = CobaltJsBridge(router)
         remoteKeyHandler = TVRemoteKeyHandler(this) { binding.webView }
         googleAuthManager = GoogleAuthManager(applicationContext, router.syncAuthService)
+        appUpdateManager = AppUpdateManager(this)
 
         setupWebView()
         loadTargetUrl(intent)
 
         lifecycleScope.launch {
             googleAuthManager.syncDeviceGoogleAccountIfAvailable()
+            appUpdateManager.checkForUpdates(isManualCheck = false)
         }
     }
 
