@@ -25,7 +25,7 @@ class TVWebViewClient(private val context: Context) : WebViewClient() {
         // Bump whenever patch logic changes: patched JS/CSS are cached on disk
         // keyed by URL, so without a version in the key, updated patches would
         // never take effect until the 24h cache entry expires.
-        private const val PATCH_VERSION = 3
+        private const val PATCH_VERSION = 5
 
         // CSS gradient functions neutralized to kill Kabuki scrim overlays.
         // Order matters: longest names first so "-webkit-linear-gradient" is not
@@ -377,6 +377,36 @@ class TVWebViewClient(private val context: Context) : WebViewClient() {
                 val initCount = js.split(origInitRate).size - 1
                 js = js.replace(origInitRate, patchedInitRate)
                 Log.d(TAG, "[Speed-Unlock] player iIZ init rate patched x$initCount")
+
+                // 5) Patch NF playback rate clamp to allow rates up to 4.0x
+                val origNfClamp = "F=F[F[v[l^3812]]-1];a<=G||(a>=F?G=F:"
+                val patchedNfClamp = "F=Math.max(4,F[F[v[l^3812]]-1]);a<=G||(a>=F?G=F:"
+                val nfCount = js.split(origNfClamp).size - 1
+                js = js.replace(origNfClamp, patchedNfClamp)
+                Log.d(TAG, "[Speed-Unlock] NF playback rate clamp patched to 4.0x x$nfCount")
+
+                // 6) Patch available playback rates filter to include up to 4.0x
+                val origFilter = "var L=N.jW,g=N.Cj;return oBf.filter(function(a){return a>=L&&a<=g})"
+                val patchedFilter = "var L=N.jW,g=Math.max(4,N.Cj||2);return oBf.filter(function(a){return a>=L&&a<=g})"
+                val filterCount = js.split(origFilter).size - 1
+                js = js.replace(origFilter, patchedFilter)
+                Log.d(TAG, "[Speed-Unlock] oBf available rates filter patched to 4.0x x$filterCount")
+
+                // 7) Patch oBf array to include 2.25 and 2.75
+                val origObf = "oBf=s1f.concat([2.5,3,3.5,4])"
+                val patchedObf = "oBf=s1f.concat([2.25,2.5,2.75,3,3.5,4])"
+                val obfCount = js.split(origObf).size - 1
+                js = js.replace(origObf, patchedObf)
+                Log.d(TAG, "[Speed-Unlock] oBf rate ladder expanded with 2.25 & 2.75 x$obfCount")
+
+                // Fallbacks for older player variants
+                val origAu1Clamp = "v=v[v.length-1];L<=N?L=N:L>=v?L=v:"
+                val patchedAu1Clamp = "v=Math.max(4,v[v.length-1]);L<=N?L=N:L>=v?L=v:"
+                js = js.replace(origAu1Clamp, patchedAu1Clamp)
+
+                val origWsFilter = "return WsS.filter(function(g){return g>=L&&g<=v})"
+                val patchedWsFilter = "return WsS.filter(function(g){return g>=L&&g<=Math.max(4,v||2)})"
+                js = js.replace(origWsFilter, patchedWsFilter)
             }
 
             val bytes = js.toByteArray(Charsets.UTF_8)

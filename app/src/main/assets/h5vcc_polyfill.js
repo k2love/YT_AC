@@ -196,6 +196,28 @@
                     } catch (eExp) {}
                 }
             }
+
+            // Sync radio button selection state with window._k2CurrentSpeed
+            var curSpeed = window._k2CurrentSpeed || 1.0;
+            for (var ri = 0; ri < items.length; ri++) {
+                var rClr = items[ri] && items[ri].compactLinkRenderer;
+                if (rClr && rClr.secondaryIcon) {
+                    var val = null;
+                    var rCmds = rClr.serviceEndpoint && rClr.serviceEndpoint.commandExecutorCommand && rClr.serviceEndpoint.commandExecutorCommand.commands;
+                    if (rCmds) {
+                        for (var rc = 0; rc < rCmds.length; rc++) {
+                            var rScs = rCmds[rc].setClientSettingEndpoint;
+                            if (rScs && rScs.settingDatas && rScs.settingDatas[0]) {
+                                val = Number(rScs.settingDatas[0].intValue);
+                            }
+                        }
+                    }
+                    if (val !== null) {
+                        var isMatch = Math.abs(val - curSpeed) < 0.01;
+                        rClr.secondaryIcon.iconType = isMatch ? 'RADIO_BUTTON_CHECKED' : 'RADIO_BUTTON_UNCHECKED';
+                    }
+                }
+            }
         }
     }
 
@@ -1871,7 +1893,25 @@
             for (var pi = 0; pi < panels.length; pi++) {
                 var p = panels[pi];
                 if (p.__instance && p.__instance.props && p.__instance.props.data && p.__instance.props.data.items) {
-                    k2ExpandSpeedItemsInArray(p.__instance.props.data.items);
+                    var items = p.__instance.props.data.items;
+                    k2ExpandSpeedItemsInArray(items);
+
+                    if (items.length > 8) {
+                        var vlist = p.querySelector('yt-virtual-list');
+                        var vInst = vlist ? vlist.__instance : null;
+                        if (vInst && vInst.j) {
+                            if (vInst.j.G !== vInst.j.B && typeof vInst.j.B === 'function') {
+                                vInst.j.G = vInst.j.B;
+                            }
+                            var snap = vInst.j.snapshot;
+                            if (!snap || !snap.positions || snap.positions.length < items.length) {
+                                vInst.props.version = (vInst.props.version || 0) + 1;
+                                if (typeof vInst.A === 'function' && (!vInst.j.isActive || !vInst.j.isActive())) {
+                                    vInst.A();
+                                }
+                            }
+                        }
+                    }
                 }
             }
         } catch (e) {}
