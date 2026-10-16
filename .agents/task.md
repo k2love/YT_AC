@@ -1,27 +1,24 @@
-# 작업 보드: 설정 화면 YouTube Premium 완전 제거 및 앱 버전 1.0.1 상향
+# 작업 보드: 설정 > 고객센터 깃허브 URL 및 QR코드 변경
 
 ## 1. 개요 및 사용자 요구사항
-1. **[설정] 우측 메인 패널의 'YouTube Premium 가입' 완전 제거**:
-   - 증상: 설정 톱니바퀴 진입 시 좌측 탭에서는 'YouTube Premium 가입' 카드가 사라졌으나, 우측 메인 패널에 커다란 YouTube Premium 가입 배너와 버튼이 그대로 노출됨.
-   - 목표: 우측 메인 패널에서도 YouTube Premium 가입 안내를 완전히 소멸시키고, 첫 번째 유효 메뉴인 '구매 항목 및 멤버십'의 상세 화면이 기본으로 즉시 나타나도록 조치.
-2. **[업데이트] 앱 버전 상향 및 반영**:
-   - 증상: '최신 앱 업데이트 확인' 실행 시 계속 `v1.0.0`으로 표출됨.
-   - 목표: `build.gradle.kts`의 버전을 `versionName = "1.0.1"`, `versionCode = 2`로 상향하여 다이얼로그에 최신 버전(v1.0.1)으로 즉시 반영.
+- **요구사항**: 설정 -> 정보 -> '고객센터' 화면의 웹 주소와 QR 코드를 우리 깃허브(`https://github.com/k2love/YT_AC`)로 등록.
+- **제외 사항**: '의견 보내기'는 이번 작업에서 건드리지 않고 다음 작업으로 이관.
+- **성공 기준**:
+  - '고객센터' 선택 시 우측에 표시되는 URL 텍스트가 `youtube.com/tv_help`에서 `github.com/k2love/YT_AC`로 변경됨.
+  - 우측에 표시되는 QR 코드가 `https://github.com/k2love/YT_AC`로 연결되는 정상 QR 코드로 대체 렌더링됨.
+  - '의견 보내기' 등 다른 설정 화면 및 기능에는 일체 영향이 없음.
+  - 실제 Android TV 기기(`192.168.100.121`)에서 캡처 검증 완료.
 
 ## 2. 작업 단계
-- [x] 1. 원인 정밀 규명 및 DOM 구조 분석:
-  - YouTube TV의 InnerTube browse 응답에서 0번 탭(Premium)과 우측 content(`settingActionRenderer`)가 기본 매핑되어 로드됨.
-  - 좌측 DOM만 숨김 처리되어 우측 `settingActionRenderer`가 초기 뷰로 그대로 렌더링됨.
-- [x] 2. `implementation_plan_settings_premium_purge_and_version_bump_20261016.md` 계획서 작성
-- [x] 3. 수술적 정밀 코드 수정:
-  - `app/build.gradle.kts`: `versionCode = 2`, `versionName = "1.0.1"` 상향
-  - `app/src/main/assets/h5vcc_polyfill.js`:
-    - InnerTube API / JSON 응답 인터셉터(`sanitizeAdsDirectly`)에서 Premium 탭 및 관련 `settingActionRenderer`를 데이터 계층에서 완전히 소멸
-    - `k2InjectSettingsUpdateCard()`에서 우측 패널의 프리미엄 잔여 렌더러 즉시 감지 및 제거, 설정 진입 시 첫 번째 유효 탭('구매 항목 및 멤버십')으로 자동 선택/동기화
-- [x] 4. Gradle 빌드 성공 확인 (`.\gradlew.bat assembleDebug`)
-- [x] 5. TV 기기(`192.168.100.121:5555`)에 APK 배포 및 설치
-- [x] 6. 실제 TV 기기 화면 캡처 검증:
-  - 설정 화면 진입 시 우측 메인 패널에 Premium이 사라지고 '구매 항목 및 멤버십'이 즉시 노출되는지 검증 완료 (`tv_screen_settings_verified.png`)
-  - '최신 앱 업데이트 확인' 선택 시 다이얼로그에 `v1.0.1`로 정상 표시되는지 검증 완료 (`tv_screen_update_dialog_v101.png`)
-- [x] 7. `walkthrough_settings_premium_purge_and_version_bump_20261016.md` 결과 리포트 작성
-- [x] 8. Git 커밋 및 `origin/main` 원격 저장소 푸시
+- [/] 1. '고객센터' 우측 뷰의 DOM 및 렌더러 구조 정밀 분석
+- [/] 2. `implementation_plan_settings_help_center_github_20261016.md` 계획서 작성
+- [/] 3. 깃허브 URL용 QR 코드 생성 (SVG 또는 Data URI / Canvas / img)
+- [/] 4. `app/src/main/assets/h5vcc_polyfill.js`에 수술적 정밀 최소 수정 적용:
+  - '고객센터' 패널 감지 시 텍스트 및 QR 코드를 깃허브 저장소 정보로 교체
+- [/] 5. Gradle 빌드 성공 확인 (`.\gradlew.bat assembleDebug`)
+- [/] 6. TV 기기(`192.168.100.121:5555`)에 APK 배포 및 설치
+- [/] 7. 실제 TV 기기 화면 캡처 검증:
+  - 설정 -> 정보 -> 고객센터 선택 시 깃허브 주소 및 QR 코드 정상 표시 확인
+  - 의견 보내기 및 타 메뉴 정상 동작 확인
+- [/] 8. `walkthrough_settings_help_center_github_20261016.md` 결과 리포트 작성
+- [ ] 9. Git 커밋 및 `origin/main` 푸시

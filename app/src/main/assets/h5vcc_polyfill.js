@@ -1046,6 +1046,57 @@
         }, true);
     }
 
+    // GitHub repo QR for Settings > About > Help Center (replaces youtube.com/tv_help QR).
+    var K2_GITHUB_URL_TEXT = 'github.com/k2love/YT_AC';
+    var K2_GITHUB_QR_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAdQAAAHUCAYAAACDJ9lsAAAKwElEQVR4nO3cQY4jORJFwdSg7n/lmBs0OlCPne6i2bonEaJC9cBZ/M/zPM8PAPBX/vd3/3MAQFABIOKGCgABQQWAgKACQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAgIKgAEBBUAAoIKAAFBBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQASAgqAAQEFQACAgqAAQEFQAEFQBm+PMzzOfz+e1H+CrP84w6/7fPc9q0zzvt/T/9fU37vLd9v9s9w/498X/5AkBAUAEgIKgAEBBUAAgIKgAEBBUAAoIKAAFBBYCAoAJAQFABICCoAPCNW77btxxv2569zenzmbad+/a/f/v807Zwp73/057ntM/yrWM3VAAICCoABAQVAAKCCgABQQWAgKACQEBQASAgqAAQEFQACAgqAAQEFQAC67d8t29F3rbVOY3zb8/n9Pbvabc9/2nPsPM5zQ0VAAKCCgABQQWAgKACQEBQASAgqAAQEFQACAgqAAQEFQAEFQBmcEMFgMB1W7787hbo6W3YabZvmTp/+PfcUAEgIKgAEBBUAAgIKgAEBBUAAoIKAAFBBYCAoAJAQFABICCoABAQVAAI2PLlq7Z2p23nvj2faec/7XlgMjdUAAgIKgAEBBUAAoIKAAFBBYCAoAJAQFABICCoABAQVAAICCoABAQVAALXbflO23rd7vTW67Qt2bfPc/p9m/Y+T3ue2zj/3+WGCgABQQWAgKACQEBQASAgqAAQEFQACAgqAAQEFQAEFQBmcEMFgICgAkBg/Zbv6e3W25ze2p1m+xbxbX//tGnP79+3XdxQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAh8nmljmny109uk017n2z7vbdu528+flhsqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAgIKgAEBBUAAoIKAIE/P5c5vdV5erv1rdPP//bvn36ead/vbVuv095/78Pvns/253nLDRUAAoIKAAFBBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAb9zyPb0FOm370TbmrvPcvu381rSt5rembTVP26qd9n1t54YKAAFBBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQODzTBu3fWna9uY02z/vtNdz2vs27XxOcz7t+Wz3DHv/3VABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQASAgqAAQEFQACPz5WW7aVuptW6PTtoJvO//tn3fa9uzp5zl9/tv/vfoMex/eckMFgICgAkBAUAEgIKgAEBBUAAgIKgAEBBUAAoIKAAFBBYCAoAJAQFABIPB5ho17bt9ynGba9ub2rdG3nM/vnud2238vn+XbyG+5oQJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQASAgqAAQ+PNz2XblW9O2Lqedz/bPu/3vn7b99zVt63XaeU5737ZzQwWAgKACQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAHgG7d8p21dnjZte3Pa80zbzp3299+att26/Xxuex7+mRsqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAgIKgAEBBUAAoIKAN+45XvbNua055lm2nbutC3c06adz+nvd9rnnfb+n/ZZ/vtyQwWAgKACQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAHgG7d8p211TjNtO5T2PKe9/9u3Vbe7bZv6Wf7vjxsqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAgIKgAEBBUAAoIKAN+45Ttt63Ka257/tu/3tO3bsL7fXZ7Lfo9uqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAgIKgAE1m/5TnN6y3Tatu20rc5p5/PWtOd56/T277Tvd9rW8fbva/vvxQ0VAAKCCgABQQWAgKACQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgMB1W77TtjS3b1ee3lY9/XlPP/+07dnTtv++btvO3f57nMYNFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAgIKgAEBBUAAoIKAAFBBYDA5xk2Hnp6y/H0liat7duh259/mtvOc9rntWX9z9xQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAj8+Rlm+3blNNu3am9jS/Z3z9NWbXuet/377IYKAAFBBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACwDdu+Z7ecjy91TnN9s877X2YZtrzT9tinfb3p20L03JDBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQAeAbt3xv2648vTV6+nymbbe+NW1bddr7sH0re/t5vjXt9/XW9n/P3VABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQASAgqAAQEFQA+MYt32nbqtN4/l2mvZ/TnmeaadvX02zfsj7NDRUAAoIKAAFBBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAwOfZPp7IV2+Nbn89p53nbd/XtG3k027bQn+Gnb8bKgAEBBUAAoIKAAFBBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgCBPz/DTNuK3O7t1uW0bcxpW6zTtlJ9X7tM+36nvc/buaECQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgA8I1bvm9N2zI97fQ25rTt3Gnboafft2nbradNO8/t789bt53/aW6oABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQASAgqAAQEFQACAgqAATWb/m+NW0rctq25/atzu3P89bb55/2PNvd9nm3v5+nuaECQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAELhuy5ff3dKcttV5evt32tbr6W3Vad/vbVuy0963Z/l5vuWGCgABQQWAgKACQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkDAli//6Rbo9m3Pac8/bbv1ts97eivY5931e3RDBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQASBw3ZbvtO3HaaZtjU7bFp72PNPe59Pbtqdtf/7Tz3P69/IMO8+33FABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQASAgqAAQEFQACKzf8j29rQr/5dbotK3g039/++932vNPe563tm//uqECQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEPg808YQAWAhN1QACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAgIKgAEBBUAAoIKAAFBBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAgIKgAEBBUAfv7e/wHef/6aKA8AWgAAAABJRU5ErkJggg==';
+
+    // Patches ONLY the Help Center right panel ([idomkey="AboutSettingItemIdABOUT_HELP"]):
+    // swaps the QR background to the GitHub repo QR and rewrites the help URL text.
+    // Strictly scoped - 'Send feedback' (의견 보내기) and all other panels untouched.
+    function k2PatchHelpCenterPanel() {
+        try {
+            var panel = document.querySelector('[idomkey="AboutSettingItemIdABOUT_HELP"]');
+            if (!panel) return;
+
+            // 1. QR code background (ytlr-thumbnail-details holds style.backgroundImage = url(...))
+            var thumbs = panel.querySelectorAll('ytlr-thumbnail-details');
+            for (var i = 0; i < thumbs.length; i++) {
+                var el = thumbs[i];
+                var current = '';
+                try { current = el.style.backgroundImage || ''; } catch (e0) {}
+                if (!current) {
+                    try {
+                        var cs = window.getComputedStyle(el);
+                        if (cs) current = cs.backgroundImage || '';
+                    } catch (e1) {}
+                }
+                if (current && current.indexOf('data:image') !== -1 &&
+                    current.indexOf(K2_GITHUB_QR_DATA_URL) === -1) {
+                    el.style.setProperty('background-image', 'url("' + K2_GITHUB_QR_DATA_URL + '")', 'important');
+                    if (!window._k2HelpLogged) {
+                        console.log('[ZeroAd] Help Center QR replaced with GitHub repo QR.');
+                    }
+                }
+            }
+
+            // 2. Help URL text (youtube.com/tv_help -> github.com/k2love/YT_AC)
+            var strs = panel.querySelectorAll('yt-formatted-string');
+            for (var j = 0; j < strs.length; j++) {
+                var t = strs[j].textContent || '';
+                if (t.indexOf('youtube.com/tv_help') !== -1) {
+                    strs[j].textContent = t.split('youtube.com/tv_help').join(K2_GITHUB_URL_TEXT);
+                    if (!window._k2HelpLogged) {
+                        console.log('[ZeroAd] Help Center URL replaced with GitHub repo URL.');
+                    }
+                }
+            }
+
+            window._k2HelpLogged = true;
+        } catch (e) {
+            console.warn('[ZeroAd] Error patching help center panel:', e);
+        }
+    }
+
     function k2InjectSettingsUpdateCard() {
         try {
             k2SetupGlobalKeyHandler();
@@ -1235,6 +1286,7 @@
     }
 
     setInterval(k2InjectSettingsUpdateCard, 500);
+    setInterval(k2PatchHelpCenterPanel, 1000);
 
     console.log("[ZeroAd] Ultra-Clean Zero-Ad Engine v8 fully engaged.");
 })();
