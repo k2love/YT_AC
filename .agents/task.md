@@ -1,22 +1,25 @@
-# 작업 보드: 초반 로딩 속도 최적화, 2160p 뒤로가기 복구, 설정 내 업데이트 확인 버튼 배치
+# 작업 보드: 설정 메뉴 업데이트/버전 탭 분리 및 YouTube Premium 가입 항목 숨김
 
-- [x] 1. 요구사항 분석 및 구현 계획 수립 <!-- id: 0 -->
-    - [x] 초반 로딩 지연 원인(캐시 부재, 매회 정규식 재처리, 시작 시 API 호출) 분석
-    - [x] 2160p 동영상 뒤로가기 무반응 원인(가짜 JS 이벤트 무시 및 네이티브 키 누락) 규명
-    - [x] 설정 메뉴 맨 하단 '앱 버전' 위 업데이트 확인 버튼 배치 및 자동 업데이트 제거 계획 수립
-    - [x] 구현 계획서(`.agents/implementation_plan_startup_speed_and_back_2160p_20261016.md`) 작성
-- [x] 2. 초반 로딩 속도 대폭 최적화 <!-- id: 1 -->
-    - [x] `TVWebViewClient.kt`에 OkHttp 50MB HTTP 캐시 및 패치 바이너리 디스크 캐시(`patched_web_cache`) 구축
-    - [x] `MainActivity.kt`에서 시작 시 `checkForUpdates(false)` 제거 및 시작 URL `https://www.youtube.com/tv`로 단순화
-    - [x] 폴리필 주입 중복 제거
-- [x] 3. 2160p 동영상 뒤로가기 정상화 <!-- id: 2 -->
-    - [x] `TVRemoteKeyHandler.kt`에서 동영상 및 오버레이 닫기 시 신뢰할 수 있는 단일 네이티브 `KEYCODE_ESCAPE` (ACTION_DOWN + ACTION_UP) 디스패치 복원
-    - [x] `movie_player.focus()` 및 오디오 누수 방지 뮤트/정지 유지
-    - [x] 계정 선택기 방어 플래그(`window._k2InBackNavigation`) 및 홈 화면 더블 클릭 종료 로직 유지
-- [x] 4. 설정 화면 내 '앱 버전' 바로 위 업데이트 확인 버튼 삽입 <!-- id: 3 -->
-    - [x] `h5vcc_polyfill.js`의 `k2InjectSettingsUpdateCard` 수정 (버전 항목 바로 위 삽입 및 리모컨 UI 스타일링)
-    - [x] `MainActivity.kt`의 `checkAppUpdate()`에서 `checkForUpdates(isManualCheck = true)` 즉각 연동
-- [x] 5. 빌드 검증 및 깃허브 배포 <!-- id: 4 -->
-    - [x] `.\gradlew.bat assembleDebug` 빌드 검증 (성공)
-    - [x] 최신 `YT_TV_AC.apk` 프로젝트 루트 복사 및 Git 커밋/푸시
-    - [x] 결과 리포트(`.agents/walkthrough_startup_speed_and_back_2160p_20261016.md`) 작성
+## 1. 개요 및 사용자 요구사항
+- **요구사항 1**: YouTube TV [설정] 메뉴 맨 아래에 있는 `최신 앱 업데이트 확인`과 `앱 버전` 두 메뉴가 리모컨 선택 시 동시에 선택(하이라이트)되는 문제를 완벽히 분리.
+- **요구사항 2**: [설정] 메뉴 최상단에 있는 `YouTube Premium 가입` 항목 완전 숨김/제거.
+
+## 2. 작업 목록
+- [x] 1. WebView DOM 구조 및 CSS 클래스 정밀 분석 (설정 화면 진입 후 탭 상태 검사)
+- [x] 2. `implementation_plan_settings_menu_split_and_premium_hide_20261016.md` 계획서 작성
+- [x] 3. `h5vcc_polyfill.js` 수술적 정밀 수정:
+  - `YouTube Premium 가입` 탭 숨김 처리 (CSS + JS 감시 및 첫 탭 자동 전환)
+  - `최신 앱 업데이트 확인` 탭과 `앱 버전` 탭의 독립성 보장:
+    - 복제 시 선택/포커스 클래스 및 `aria-selected` 초기화 (`k2SetElementFocusState`)
+    - 포커스 진입/이탈(`focusin`/`focusout`) 시 `versionTab`과 상호 간섭 차단
+    - 우측 패널 연동 분리 (`k2UpdateRightDetailPanel`)
+    - D-Pad 전역 키 인터셉터 (`k2SetupGlobalKeyHandler`) 구현으로 완벽한 상하 이동 및 엔터 다이얼로그 호출 보장
+- [x] 4. APK 빌드 (`gradlew assembleDebug`)
+- [x] 5. TV 기기(`192.168.100.121:5555`)에 APK 설치 및 앱 실행
+- [x] 6. TV 화면 캡처 및 리모컨 이동 테스트로 완벽 검증:
+  - 설정 최상단 `YouTube Premium 가입` 메뉴 완전 제거 및 첫 탭 `구매 항목 및 멤버십` 노출 확인 (`tv_screen_membership_active.png`)
+  - `최신 앱 업데이트 확인` 선택 시 단독 하이라이트 확인 (`tv_screen_update_focused.png`)
+  - `앱 버전` 선택 시 단독 하이라이트 확인 (`tv_screen_version_focused.png`)
+  - OK(Enter) 클릭 시 안드로이드 네이티브 최신 버전 업데이트 다이얼로그 즉시 팝업 확인 (`tv_screen_dialog_enter.png`)
+- [ ] 7. GitHub 원격 저장소 커밋 및 푸시
+- [ ] 8. `walkthrough_settings_menu_split_and_premium_hide_20261016.md` 작성 및 사용자 보고

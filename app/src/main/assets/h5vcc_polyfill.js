@@ -863,16 +863,194 @@
     }
 
     // =========================================================================
-    // 7. YouTube TV Settings Screen Update Widget Injector
-    // Injects an "App Info & Update" item right above the app version in settings
+    // 7. YouTube TV Settings Screen Update Widget Injector & Premium Purger
+    // - Hides 'YouTube Premium 가입' from the top of settings
+    // - Injects a dedicated '최신 앱 업데이트 확인' tab right above '앱 버전'
+    // - Completely separates active/focus states and right detail panel
     // =========================================================================
+    function k2SetElementFocusState(tabEl, focused) {
+        if (!tabEl) return;
+        var btn = tabEl.querySelector('ytlr-button');
+        var lockup = tabEl.querySelector('ytlr-avatar-lockup');
+        if (focused) {
+            tabEl.classList.add('V0Tdtb', 'qzhmA', 'zylon-focus');
+            tabEl.classList.remove('JqwODe');
+            if (btn) {
+                btn.classList.add('BZ345e', 'zylon-focus');
+                btn.classList.remove('pAenK');
+            }
+            if (lockup) {
+                lockup.classList.add('dalgG');
+                lockup.classList.remove('yZD8Ze');
+            }
+        } else {
+            tabEl.classList.remove('V0Tdtb', 'qzhmA', 'zylon-focus');
+            tabEl.classList.add('JqwODe');
+            if (btn) {
+                btn.classList.remove('BZ345e', 'zylon-focus');
+                btn.classList.add('pAenK');
+            }
+            if (lockup) {
+                lockup.classList.remove('dalgG');
+                lockup.classList.add('yZD8Ze');
+            }
+        }
+    }
+
+    function k2UpdateRightDetailPanel(isUpdateTabFocused) {
+        try {
+            var scrollPane = document.querySelector('yt-scroll-pane');
+            if (!scrollPane) return;
+            var origBox = scrollPane.querySelector('.ogHbMc');
+            var customId = 'yt-ac-update-detail-panel';
+            var customPanel = document.getElementById(customId);
+
+            if (isUpdateTabFocused) {
+                if (origBox) origBox.style.display = 'none';
+                if (!customPanel) {
+                    customPanel = document.createElement('div');
+                    customPanel.id = customId;
+                    customPanel.className = 'ogHbMc';
+                    customPanel.innerHTML =
+                        '<div class="WBbfC" style="padding-top: 0rem; padding-right: 1.84rem;">' +
+                        '<div class="XMA1jc"><div class="vjkzh">업데이트 검사</div><div class="LNwekb">리모컨 선택(확인) 시 최신 빌드를 즉시 확인합니다</div></div>' +
+                        '<div class="XMA1jc"><div class="vjkzh">배포 방식</div><div class="LNwekb">GitHub OTA 원클릭 자동/수동 업데이트</div></div>' +
+                        '<div class="XMA1jc"><div class="vjkzh">엔진 상태</div><div class="LNwekb">Zero-Ad 무광고 클린 엔진 & 4K 복원 활성화</div></div>' +
+                        '</div>';
+                    scrollPane.appendChild(customPanel);
+                }
+                customPanel.style.display = 'block';
+            } else {
+                if (customPanel) customPanel.style.display = 'none';
+                if (origBox) origBox.style.display = '';
+            }
+        } catch (e) {}
+    }
+
+    function k2SetupGlobalKeyHandler() {
+        if (window._k2GlobalKeySetup) return;
+        window._k2GlobalKeySetup = true;
+
+        window.addEventListener('keydown', function(e) {
+            var myTab = document.getElementById('yt-ac-settings-update-banner');
+            if (!myTab) return;
+
+            var allTabs = Array.from(document.querySelectorAll('ytlr-tab-renderer'));
+            var versionTab = allTabs.find(function(t) {
+                return t.id !== 'yt-ac-settings-update-banner' && /(앱\s*버전|App\s*version)/i.test(t.innerText);
+            });
+            if (!versionTab) return;
+
+            var active = document.activeElement;
+            var isMyTabActive = myTab.contains(active);
+            var isVersionActive = versionTab.contains(active);
+
+            // Find the terms tab (previous tab)
+            var termsTab = allTabs.find(function(t) { return /개인정보|약관|Terms/i.test(t.innerText); });
+            var isTermsActive = termsTab && termsTab.contains(active);
+
+            var isDown = (e.keyCode === 40 || e.keyCode === 20 || e.key === 'ArrowDown' || e.key === 'Down');
+            var isUp = (e.keyCode === 38 || e.keyCode === 19 || e.key === 'ArrowUp' || e.key === 'Up');
+            var isEnter = (e.keyCode === 13 || e.keyCode === 23 || e.key === 'Enter');
+
+            // 1. If currently on Terms tab and presses DOWN -> jump to update tab
+            if (isTermsActive && isDown) {
+                e.preventDefault();
+                e.stopPropagation();
+                var uBtn = myTab.querySelector('ytlr-button') || myTab;
+                if (termsTab) k2SetElementFocusState(termsTab, false);
+                k2SetElementFocusState(versionTab, false);
+                k2SetElementFocusState(myTab, true);
+                k2UpdateRightDetailPanel(true);
+                uBtn.focus();
+                return;
+            }
+
+            // 2. If currently on Update tab:
+            if (isMyTabActive) {
+                if (isEnter) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (window.YT_TV_APP && typeof window.YT_TV_APP.checkAppUpdate === 'function') {
+                        window.YT_TV_APP.checkAppUpdate();
+                    }
+                    return;
+                }
+                if (isUp) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    k2SetElementFocusState(myTab, false);
+                    k2UpdateRightDetailPanel(false);
+                    if (termsTab) {
+                        var tBtn = termsTab.querySelector('ytlr-button') || termsTab;
+                        tBtn.focus();
+                        tBtn.click();
+                    }
+                    return;
+                }
+                if (isDown) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    k2SetElementFocusState(myTab, false);
+                    k2SetElementFocusState(versionTab, true);
+                    k2UpdateRightDetailPanel(false);
+                    var vBtn = versionTab.querySelector('ytlr-button') || versionTab;
+                    vBtn.focus();
+                    vBtn.click();
+                    return;
+                }
+            }
+
+            // 3. If currently on Version tab and presses UP -> jump to update tab
+            if (isVersionActive && isUp) {
+                e.preventDefault();
+                e.stopPropagation();
+                var uBtn2 = myTab.querySelector('ytlr-button') || myTab;
+                k2SetElementFocusState(versionTab, false);
+                k2SetElementFocusState(myTab, true);
+                k2UpdateRightDetailPanel(true);
+                uBtn2.focus();
+                return;
+            }
+        }, true);
+    }
+
     function k2InjectSettingsUpdateCard() {
         try {
-            var existingTab = document.getElementById('yt-ac-settings-update-banner');
+            k2SetupGlobalKeyHandler();
 
             // Find all ytlr-tab-renderer elements in settings list
             var allTabs = Array.from(document.querySelectorAll('ytlr-tab-renderer'));
             if (allTabs.length === 0) return;
+
+            // 1. Hide 'YouTube Premium 가입' tab if present & auto-switch to first visible tab
+            var premiumTab = null;
+            for (var p = 0; p < allTabs.length; p++) {
+                var tab = allTabs[p];
+                var txt = (tab.innerText || tab.textContent || '').trim();
+                if (/Premium|프리미엄/i.test(txt)) {
+                    premiumTab = tab;
+                    if (tab.style.display !== 'none') {
+                        tab.style.setProperty('display', 'none', 'important');
+                        tab.setAttribute('aria-hidden', 'true');
+                        tab.removeAttribute('hybridnavfocusable');
+                    }
+                }
+            }
+
+            // Auto-select first visible tab if premiumTab was selected by default
+            if (premiumTab && (premiumTab.classList.contains('zylon-focus') || premiumTab.classList.contains('V0Tdtb'))) {
+                k2SetElementFocusState(premiumTab, false);
+                var firstTab = allTabs.find(function(t) {
+                    return t.style.display !== 'none' && t !== premiumTab && t.id !== 'section-header:z1' && !t.classList.contains('EtB6Qe');
+                });
+                if (firstTab) {
+                    var fBtn = firstTab.querySelector('ytlr-button') || firstTab;
+                    fBtn.click();
+                }
+            }
+
+            var existingTab = document.getElementById('yt-ac-settings-update-banner');
 
             var versionTab = allTabs.find(function(t) {
                 if (t.id === 'yt-ac-settings-update-banner') return false;
@@ -882,18 +1060,61 @@
 
             if (!versionTab || !versionTab.parentElement) return;
 
-            // If already injected and correctly placed right before versionTab, done!
+            function focusUpdateTab(targetTab) {
+                var activeTab = targetTab || existingTab;
+                if (!activeTab) return;
+                var prev = activeTab.previousElementSibling;
+                if (prev) k2SetElementFocusState(prev, false);
+                k2SetElementFocusState(versionTab, false);
+                k2SetElementFocusState(activeTab, true);
+                k2UpdateRightDetailPanel(true);
+                var uBtn = activeTab.querySelector('ytlr-button') || activeTab;
+                uBtn.focus();
+            }
+
+            function unfocusUpdateTab(targetTab) {
+                var activeTab = targetTab || existingTab;
+                if (activeTab) k2SetElementFocusState(activeTab, false);
+                k2UpdateRightDetailPanel(false);
+            }
+
+            // If already injected and correctly placed right before versionTab, check focus sync
             if (existingTab) {
                 if (existingTab.nextElementSibling !== versionTab && existingTab !== versionTab) {
                     versionTab.parentElement.insertBefore(existingTab, versionTab);
                 }
+
+                // Check if update tab has focus
+                var isUpdateActive = existingTab.matches(':focus') || existingTab.querySelector(':focus') !== null;
+                var isVersionActive = versionTab.matches(':focus') || versionTab.querySelector(':focus') !== null;
+
+                if (isUpdateActive && !isVersionActive) {
+                    k2SetElementFocusState(existingTab, true);
+                    k2SetElementFocusState(versionTab, false);
+                    k2UpdateRightDetailPanel(true);
+                } else if (isVersionActive && !isUpdateActive) {
+                    k2SetElementFocusState(existingTab, false);
+                    k2SetElementFocusState(versionTab, true);
+                    k2UpdateRightDetailPanel(false);
+                } else if (!isUpdateActive) {
+                    // Make sure update tab doesn't accidentally retain focus class
+                    if (existingTab.classList.contains('zylon-focus')) {
+                        k2SetElementFocusState(existingTab, false);
+                    }
+                }
                 return;
             }
 
-            // Clone versionTab to inherit 100% of YouTube TV's native layout, fonts, and spatial navigation
+            // Clone versionTab to inherit 100% of YouTube TV's native layout, fonts, and styling
             var myTab = versionTab.cloneNode(true);
             myTab.id = 'yt-ac-settings-update-banner';
             myTab.removeAttribute('idomkey');
+            myTab.removeAttribute('aria-labelledby');
+            myTab.removeAttribute('aria-selected');
+            myTab.tabIndex = 0;
+
+            // Initialize to clean unselected state immediately!
+            k2SetElementFocusState(myTab, false);
 
             // Update text to pure plain text matching native menu exactly (no emoji!)
             var textEl = myTab.querySelector('yt-formatted-string') || myTab.querySelector('span') || myTab;
@@ -910,11 +1131,35 @@
                 }
             }
 
-            myTab.addEventListener('click', triggerCheck);
-            myTab.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' || e.keyCode === 13) {
-                    triggerCheck(e);
+            // Remote D-Pad Navigation & Focus Handlers
+            var btn = myTab.querySelector('ytlr-button') || myTab;
+            btn.tabIndex = 0;
+
+            myTab.addEventListener('focusin', function() {
+                focusUpdateTab(myTab);
+            });
+
+            myTab.addEventListener('focusout', function(e) {
+                if (!myTab.contains(e.relatedTarget)) {
+                    unfocusUpdateTab(myTab);
                 }
+            });
+
+            versionTab.addEventListener('focusin', function() {
+                unfocusUpdateTab(myTab);
+                k2SetElementFocusState(versionTab, true);
+            });
+
+            versionTab.addEventListener('click', function() {
+                unfocusUpdateTab(myTab);
+                k2SetElementFocusState(versionTab, true);
+            });
+
+            myTab.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                focusUpdateTab(myTab);
+                triggerCheck(e);
             });
 
             // Clean up versionTab in case it had corrupted inner children from previous attempts
