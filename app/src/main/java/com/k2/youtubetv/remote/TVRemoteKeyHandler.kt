@@ -110,6 +110,7 @@ class TVRemoteKeyHandler(
 
                 function k2Visible(el) {
                     if (!el || !el.getBoundingClientRect) return false;
+                    if (el === document.body || el === document.documentElement || el.tagName === 'BODY' || el.tagName === 'HTML') return false;
                     try {
                         if (el.tagName === 'DIALOG' && el.hasAttribute && !el.hasAttribute('open')) return false;
                         var cs = window.getComputedStyle(el);
@@ -137,7 +138,7 @@ class TVRemoteKeyHandler(
                 }
 
                 // Fallback: visible element with menu/dialog-ish class or id.
-                // Always-on chrome (control bars, progress, thumbnails) is excluded.
+                // Always-on chrome (control bars, progress, thumbnails, app-quality-root) is excluded.
                 if (!found) {
                     var skipTags = {SCRIPT:1, STYLE:1, META:1, LINK:1, HEAD:1, HTML:1, BODY:1, VIDEO:1, SOURCE:1, TRACK:1, CANVAS:1, IMG:1, INPUT:1};
                     var all = document.getElementsByTagName('*');
@@ -146,37 +147,50 @@ class TVRemoteKeyHandler(
                         if (skipTags[e.tagName]) continue;
                         var hay = k2ClassOf(e) + ' ' + (e.id || '');
                         if (!/(menu|dialog|popup|sheet|dropdown|settings|quality|options|overflow|select|listbox)/i.test(hay)) continue;
-                        if (/(control-bar|controlbar|player-control|title|progress|seek|spinner|loader|toast|thumbnail|avatar)/i.test(hay)) continue;
+                        if (/(control-bar|controlbar|player-control|title|progress|seek|spinner|loader|toast|thumbnail|avatar|app-quality-root)/i.test(hay)) continue;
                         if (!k2Visible(e)) continue;
                         var looksOpen = (e.getAttribute && (e.getAttribute('aria-expanded') === 'true' || e.getAttribute('aria-modal') === 'true' || (e.hasAttribute && e.hasAttribute('open'))));
                         var hasItems = false;
                         try { hasItems = !!e.querySelector('[role="menuitem"], [role="option"], [role="menuitemradio"], .ytp-menuitem, button'); } catch (e4) {}
-                        if (looksOpen || hasItems || /open|show|active|visible|expanded/i.test(hay)) { found = e; foundVia = 'regex'; break; }
+                        if (looksOpen || hasItems || /open|show|active|visible|expanded/i.test(hay)) { found = e; foundVia = 'regex:' + e.tagName; break; }
                     }
                 }
 
-                // Fallback: keyboard focus sitting inside a menu-ish ancestor (climbs out of shadow roots).
+                // Fallback: keyboard focus sitting inside a menu-ish ancestor (never climb into BODY/HTML).
                 if (!found) {
                     var node = document.activeElement;
                     var guard = 0;
-                    while (node && node !== document && node !== document.documentElement && guard < 25) {
+                    while (node && node !== document && node !== document.documentElement && node !== document.body && guard < 25) {
                         guard++;
+                        if (node.tagName === 'BODY' || node.tagName === 'HTML') break;
                         var hn = k2ClassOf(node) + ' ' + (node.id || '');
                         var role = (node.getAttribute && node.getAttribute('role')) || '';
                         if (role === 'menuitem' || role === 'option' || role === 'menuitemradio' || role === 'menu' || role === 'listbox' || role === 'dialog') { found = node; foundVia = 'focus-role:' + role; break; }
                         if (node.classList && (node.classList.contains('ytp-menuitem') || node.classList.contains('ytp-panel'))) { found = node; foundVia = 'focus-class'; break; }
-                        if (/(menu|dialog|popup|panel|sheet|settings|quality|options|listbox)/i.test(hn) && !/(control-bar|player-control|progress)/i.test(hn)) { found = node; foundVia = 'focus-ancestor'; break; }
+                        if (/(menu|dialog|popup|panel|sheet|settings|quality|options|listbox)/i.test(hn) && !/(control-bar|player-control|progress|app-quality-root)/i.test(hn)) { found = node; foundVia = 'focus-ancestor'; break; }
                         if (node.parentNode && node.parentNode !== document) node = node.parentNode;
                         else if (node.getRootNode && node.getRootNode() && node.getRootNode().host) node = node.getRootNode().host;
                         else break;
                     }
                 }
 
-                if (found) {
+                if (found && found !== document.body && found.tagName !== 'BODY') {
                     // Close the overlay menu without touching video playback
                     var closer = null;
                     try {
-                        closer = found.querySelector ? found.querySelector('[aria-label*="닫기"], [aria-label*="Close"], [aria-label*="close"], [aria-label*="뒤로"], [aria-label*="Back"], [aria-label*="back"], [class*="close"], [class*="Close"], [class*="back-button"], [class*="BackButton"]') : null;
+                        var buttons = found.querySelectorAll('button, [role="button"], [class*="close"], [class*="back"], [aria-label]');
+                        for (var b = 0; b < buttons.length; b++) {
+                            var btn = buttons[b];
+                            var lbl = (btn.getAttribute('aria-label') || '').trim();
+                            var cls = k2ClassOf(btn);
+                            if (/(건너뜁니다|초\s*뒤|seek|scrub|시작하려면)/i.test(lbl)) continue;
+                            if (/^(닫기|취소|뒤로|close|back|cancel)$/i.test(lbl) ||
+                                /^(close|back|cancel)-?button/i.test(cls) ||
+                                /(ytp-panel-back-button|ytp-settings-button|ytp-close-button)/i.test(cls)) {
+                                closer = btn;
+                                break;
+                            }
+                        }
                     } catch (e) {}
                     if (closer) {
                         try { closer.click(); return 'HANDLED_MENU:closer_clicked'; } catch (e2) {}
@@ -201,15 +215,28 @@ class TVRemoteKeyHandler(
                     if (player.classList && player.classList.contains('playing-mode')) isVideoActive = true;
                 }
                 var curHref = window.location.href;
-                if (curHref.indexOf('/watch') !== -1 || (window.location.hash && window.location.hash.indexOf('watch') !== -1)) {
+                var curHash = window.location.hash || '';
+                if (curHref.indexOf('/watch') !== -1 || curHash.indexOf('watch') !== -1) {
                     isVideoActive = true;
                 }
-                if (document.querySelector('ytlr-watch-metadata-renderer, .ytp-chrome-bottom, ytlr-player-controls')) {
+                if (document.querySelector('ytlr-watch-metadata-renderer, ytlr-player-controls')) {
                     isVideoActive = true;
                 }
 
                 if (isVideoActive) {
-                    // STOP and MUTE video immediately to prevent background audio leak
+                    // Check if player controls/HUD or watch metadata is visibly open
+                    var controlsActive = false;
+                    var playerControls = document.querySelector('.ytp-chrome-bottom, ytlr-player-controls, ytlr-watch-metadata-renderer');
+                    if (playerControls && k2Visible(playerControls)) {
+                        controlsActive = true;
+                    }
+
+                    if (controlsActive) {
+                        // User has HUD open while watching video -> Escape closes the HUD without stopping playback
+                        return 'NEEDS_ESCAPE:hud';
+                    }
+
+                    // Fullscreen video playback with no HUD -> User wants to EXIT video back to browse/home
                     for (var j = 0; j < vids.length; j++) {
                         try {
                             vids[j].pause();
@@ -229,7 +256,13 @@ class TVRemoteKeyHandler(
                     return 'NEEDS_ESCAPE:video';
                 }
 
-                // 3. At browse / home screen: NEVER fire Escape or Back into WebView!
+                // 3. Sub-page navigation (Settings, Search, Channel, Library, Playlist, etc.)
+                var isRootHome = (curHash === '' || curHash === '#/' || curHash === '#/home' || curHash === '#/browse');
+                if (!isRootHome) {
+                    return 'NEEDS_ESCAPE:subpage';
+                }
+
+                // 4. Truly at root home: NEVER fire Escape or Back into WebView!
                 // Firing Escape at root home causes Kabuki to pop the stack and crash into the Account Selector!
                 return 'ROOT_HOME';
             })();

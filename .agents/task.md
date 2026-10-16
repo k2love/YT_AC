@@ -1,25 +1,23 @@
-# 작업 보드: 설정 메뉴 업데이트/버전 탭 분리 및 YouTube Premium 가입 항목 숨김
+# 작업 보드: 리모컨 뒤로가기(Back) 동작 불능 현상 원인 규명 및 근본 해결
 
 ## 1. 개요 및 사용자 요구사항
-- **요구사항 1**: YouTube TV [설정] 메뉴 맨 아래에 있는 `최신 앱 업데이트 확인`과 `앱 버전` 두 메뉴가 리모컨 선택 시 동시에 선택(하이라이트)되는 문제를 완벽히 분리.
-- **요구사항 2**: [설정] 메뉴 최상단에 있는 `YouTube Premium 가입` 항목 완전 숨김/제거.
+- **요구사항**: "종종 뒤로가기 버튼이 안 먹어."
+- **증상 및 분석 결과**:
+  1. **영상 시청 중 뒤로가기 불능**: `document.body`에 항상 존재하는 `app-quality-root` 클래스로 인해 `BODY` 태그가 팝업/메뉴 오버레이로 오판됨. 이로 인해 `BODY` 내의 `aria-label="0초 뒤로 건너뜁니다..."` 재생바(Seek bar)를 닫기 버튼으로 오인하여 클릭하거나 `NEEDS_ESCAPE:menu`를 반환하여 영상이 닫히지 않고 먹통이 됨.
+  2. **홈 화면 외 하위 페이지(검색, 설정, 채널 등)에서 뒤로가기 불능**: 비디오나 팝업이 아닌 상태는 무조건 `ROOT_HOME`으로 취급하여 웹뷰에 아무런 뒤로가기/Escape 키를 전달하지 않고 앱 종료 토스트만 띄움.
 
 ## 2. 작업 목록
-- [x] 1. WebView DOM 구조 및 CSS 클래스 정밀 분석 (설정 화면 진입 후 탭 상태 검사)
-- [x] 2. `implementation_plan_settings_menu_split_and_premium_hide_20261016.md` 계획서 작성
-- [x] 3. `h5vcc_polyfill.js` 수술적 정밀 수정:
-  - `YouTube Premium 가입` 탭 숨김 처리 (CSS + JS 감시 및 첫 탭 자동 전환)
-  - `최신 앱 업데이트 확인` 탭과 `앱 버전` 탭의 독립성 보장:
-    - 복제 시 선택/포커스 클래스 및 `aria-selected` 초기화 (`k2SetElementFocusState`)
-    - 포커스 진입/이탈(`focusin`/`focusout`) 시 `versionTab`과 상호 간섭 차단
-    - 우측 패널 연동 분리 (`k2UpdateRightDetailPanel`)
-    - D-Pad 전역 키 인터셉터 (`k2SetupGlobalKeyHandler`) 구현으로 완벽한 상하 이동 및 엔터 다이얼로그 호출 보장
-- [x] 4. APK 빌드 (`gradlew assembleDebug`)
-- [x] 5. TV 기기(`192.168.100.121:5555`)에 APK 설치 및 앱 실행
-- [x] 6. TV 화면 캡처 및 리모컨 이동 테스트로 완벽 검증:
-  - 설정 최상단 `YouTube Premium 가입` 메뉴 완전 제거 및 첫 탭 `구매 항목 및 멤버십` 노출 확인 (`tv_screen_membership_active.png`)
-  - `최신 앱 업데이트 확인` 선택 시 단독 하이라이트 확인 (`tv_screen_update_focused.png`)
-  - `앱 버전` 선택 시 단독 하이라이트 확인 (`tv_screen_version_focused.png`)
-  - OK(Enter) 클릭 시 안드로이드 네이티브 최신 버전 업데이트 다이얼로그 즉시 팝업 확인 (`tv_screen_dialog_enter.png`)
-- [ ] 7. GitHub 원격 저장소 커밋 및 푸시
-- [ ] 8. `walkthrough_settings_menu_split_and_premium_hide_20261016.md` 작성 및 사용자 보고
+- [x] 1. `implementation_plan_back_key_fix_20261016.md` 계획서 작성
+- [x] 2. `TVRemoteKeyHandler.kt` 수술적 정밀 수정:
+  - 오버레이 탐색 대상에서 `BODY` 및 `HTML` 제외 (`node === document.body || node.tagName === 'BODY'`)
+  - `closer` 검색 시 탐색바/시크바("건너뜁니다", "초 뒤", "seek" 등) 제외 및 엄격한 닫기/뒤로 버튼 매칭
+  - 홈 화면 판별 로직 정밀화: `hash`가 `#/`, `""`, `#/browse`(루트)일 때만 `ROOT_HOME` 처리, 그 외(설정, 검색, 채널, 재생목록 등)는 `NEEDS_ESCAPE:subpage`로 이전 화면 복귀 처리
+  - 영상 시청 중 Escape 처리 및 상태 전이 안정화
+- [x] 3. Gradle 빌드 (`gradlew assembleDebug`)
+- [x] 4. TV 기기(`192.168.100.121:5555`)에 APK 설치 및 앱 테스트
+- [x] 5. 실제 TV에서 뒤로가기 시나리오별 검증 및 화면 캡처:
+  - 영상 시청 중 뒤로가기 -> 홈/이전 화면 정상 복귀 (`tv_screen_after_back.png`)
+  - 서브 카테고리/설정 화면에서 뒤로가기 -> 홈 화면 정상 복귀
+  - 홈 화면에서 뒤로가기 1회 -> 토스트 노출, 2회 -> 앱 정상 종료
+- [x] 6. `walkthrough_back_key_fix_20261016.md` 작성
+- [x] 7. GitHub 원격 저장소 커밋 및 푸시
