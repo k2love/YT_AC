@@ -21,4 +21,4 @@
   - 설정 -> 정보 -> 고객센터 선택 시 깃허브 주소 및 QR 코드 정상 표시 확인
   - 의견 보내기 및 타 메뉴 정상 동작 확인
 - [/] 8. `walkthrough_settings_help_center_github_20261016.md` 결과 리포트 작성
-- [ ] 9. Git 커밋 및 `origin/main` 푸시
+- [/] 9. Git 커밋 및 `origin/main` 푸시 (`1f354b9`)
