@@ -22,3 +22,9 @@
   - 의견 보내기 및 타 메뉴 정상 동작 확인
 - [/] 8. `walkthrough_settings_help_center_github_20261016.md` 결과 리포트 작성
 - [/] 9. Git 커밋 및 `origin/main` 푸시 (`1f354b9`)
+
+## 3. 후속 작업 (2026-10-16): 원본 플래시 제거 + 의견 보내기 pulls 교체
+- [/] 1. 데이터 레이어 선교체로 원본 QR/URL 플래시 제거 (JSON 훅 + MutationObserver + 1초 백스톱)
+- [/] 2. 의견 보내기 → `github.com/k2love/YT_AC/pulls` + pulls QR 교체 (`.agents/github_qr_pulls_*`)
+- [/] 3. node 하네스 23/23 검증 + `assembleDebug` 빌드 (adb 미사용)
+- [ ] 4. 실기기 검증은 사용자 측에서 진행 (설치 후 고객센터/의견 보내기 화면 확인)

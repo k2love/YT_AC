@@ -140,6 +140,16 @@
         if (Array.isArray(obj)) {
             for (var i = obj.length - 1; i >= 0; i--) {
                 var item = obj[i];
+                if (typeof item === 'string') {
+                    // Help/feedback URLs inside arrays (e.g. renderer texts[])
+                    // never reach the object branch: rewrite them here.
+                    if (item.indexOf('youtube.com/tv_help') !== -1) {
+                        obj[i] = item.split('youtube.com/tv_help').join(K2_GITHUB_URL_TEXT);
+                    } else if (item.indexOf('youtube.com/tv/feedback') !== -1) {
+                        obj[i] = item.split('youtube.com/tv/feedback').join(K2_GITHUB_PULLS_URL_TEXT);
+                    }
+                    continue;
+                }
                 if (item && typeof item === 'object') {
                     var isAd = false;
                     for (var k in item) {
@@ -194,6 +204,38 @@
                            typeof obj[key] === 'number') {
                     // Server-driven quality cap flag -> raise to 8K 4320p.
                     obj[key] = 4320;
+                } else if (typeof obj[key] === 'string' && obj[key].indexOf('youtube.com/tv_help') !== -1) {
+                    // Help Center URL -> GitHub repo (rewritten pre-render: zero flash).
+                    obj[key] = obj[key].split('youtube.com/tv_help').join(K2_GITHUB_URL_TEXT);
+                } else if (typeof obj[key] === 'string' && obj[key].indexOf('youtube.com/tv/feedback') !== -1) {
+                    // Feedback URL -> GitHub pulls (rewritten pre-render: zero flash).
+                    obj[key] = obj[key].split('youtube.com/tv/feedback').join(K2_GITHUB_PULLS_URL_TEXT);
+                } else if (typeof obj[key] === 'string' && obj[key].length > 2000 &&
+                           obj[key].indexOf('data:image') !== -1 && obj[key].indexOf(';base64,') !== -1) {
+                    // QR artwork sibling to a help/feedback URL marker -> swap the
+                    // image bytes only (wrappers like url("...") preserved). Length
+                    // guard keeps small icons untouched; already-swapped values
+                    // no longer carry the original markers, so this is one-shot.
+                    var _markHelp = false, _markFb = false;
+                    for (var _sk in obj) {
+                        if (_sk === key) continue;
+                        var _sv = null;
+                        try { _sv = obj[_sk]; } catch (_e0) {}
+                        if (typeof _sv === 'string') {
+                            if (_sv.indexOf('youtube.com/tv_help') !== -1) { _markHelp = true; break; }
+                            if (_sv.indexOf('youtube.com/tv/feedback') !== -1) { _markFb = true; break; }
+                        } else if (_sv && typeof _sv === 'object') {
+                            try {
+                                var _sj = JSON.stringify(_sv);
+                                if (_sj.indexOf('youtube.com/tv_help') !== -1) { _markHelp = true; break; }
+                                if (_sj.indexOf('youtube.com/tv/feedback') !== -1) { _markFb = true; break; }
+                            } catch (_e1) {}
+                        }
+                    }
+                    var _qrFull = _markHelp ? K2_GITHUB_QR_DATA_URL : (_markFb ? K2_GITHUB_PULLS_QR_DATA_URL : null);
+                    if (_qrFull) {
+                        obj[key] = obj[key].replace(/data:image\/[a-zA-Z0-9+.-]+;base64,[A-Za-z0-9+/=]+/, _qrFull);
+                    }
                 } else {
                     sanitizeAdsDirectly(obj[key]);
                 }
@@ -1048,6 +1090,8 @@
 
     // GitHub repo QR for Settings > About > Help Center (replaces youtube.com/tv_help QR).
     var K2_GITHUB_URL_TEXT = 'github.com/k2love/YT_AC';
+    var K2_GITHUB_PULLS_URL_TEXT = 'github.com/k2love/YT_AC/pulls';
+    var K2_GITHUB_PULLS_QR_DATA_URL = 'data:image/png;base64,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';
     var K2_GITHUB_QR_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAdQAAAHUCAYAAACDJ9lsAAAKwElEQVR4nO3cQY4jORJFwdSg7n/lmBs0OlCPne6i2bonEaJC9cBZ/M/zPM8PAPBX/vd3/3MAQFABIOKGCgABQQWAgKACQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAgIKgAEBBUAAoIKAAFBBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQASAgqAAQEFQACAgqAAQEFQAEFQBm+PMzzOfz+e1H+CrP84w6/7fPc9q0zzvt/T/9fU37vLd9v9s9w/498X/5AkBAUAEgIKgAEBBUAAgIKgAEBBUAAoIKAAFBBYCAoAJAQFABICCoAPCNW77btxxv2569zenzmbad+/a/f/v807Zwp73/057ntM/yrWM3VAAICCoABAQVAAKCCgABQQWAgKACQEBQASAgqAAQEFQACAgqAAQEFQAC67d8t29F3rbVOY3zb8/n9Pbvabc9/2nPsPM5zQ0VAAKCCgABQQWAgKACQEBQASAgqAAQEFQACAgqAAQEFQAEFQBmcEMFgMB1W7787hbo6W3YabZvmTp/+PfcUAEgIKgAEBBUAAgIKgAEBBUAAoIKAAFBBYCAoAJAQFABICCoABAQVAAI2PLlq7Z2p23nvj2faec/7XlgMjdUAAgIKgAEBBUAAoIKAAFBBYCAoAJAQFABICCoABAQVAAICCoABAQVAALXbflO23rd7vTW67Qt2bfPc/p9m/Y+T3ue2zj/3+WGCgABQQWAgKACQEBQASAgqAAQEFQACAgqAAQEFQAEFQBmcEMFgICgAkBg/Zbv6e3W25ze2p1m+xbxbX//tGnP79+3XdxQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAh8nmljmny109uk017n2z7vbdu528+flhsqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAgIKgAEBBUAAoIKAIE/P5c5vdV5erv1rdPP//bvn36ead/vbVuv095/78Pvns/253nLDRUAAoIKAAFBBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAb9zyPb0FOm370TbmrvPcvu381rSt5rembTVP26qd9n1t54YKAAFBBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQODzTBu3fWna9uY02z/vtNdz2vs27XxOcz7t+Wz3DHv/3VABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQASAgqAAQEFQACPz5WW7aVuptW6PTtoJvO//tn3fa9uzp5zl9/tv/vfoMex/eckMFgICgAkBAUAEgIKgAEBBUAAgIKgAEBBUAAoIKAAFBBYCAoAJAQFABIPB5ho17bt9ynGba9ub2rdG3nM/vnud2238vn+XbyG+5oQJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQASAgqAAQ+PNz2XblW9O2Lqedz/bPu/3vn7b99zVt63XaeU5737ZzQwWAgKACQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAHgG7d8p21dnjZte3Pa80zbzp3299+att26/Xxuex7+mRsqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAgIKgAEBBUAAoIKAN+45XvbNua055lm2nbutC3c06adz+nvd9rnnfb+n/ZZ/vtyQwWAgKACQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAHgG7d8p211TjNtO5T2PKe9/9u3Vbe7bZv6Wf7vjxsqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAgIKgAEBBUAAoIKAN+45Ttt63Ka257/tu/3tO3bsL7fXZ7Lfo9uqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAgIKgAE1m/5TnN6y3Tatu20rc5p5/PWtOd56/T277Tvd9rW8fbva/vvxQ0VAAKCCgABQQWAgKACQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgMB1W77TtjS3b1ee3lY9/XlPP/+07dnTtv++btvO3f57nMYNFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAgIKgAEBBUAAoIKAAFBBYDA5xk2Hnp6y/H0liat7duh259/mtvOc9rntWX9z9xQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAj8+Rlm+3blNNu3am9jS/Z3z9NWbXuet/377IYKAAFBBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACwDdu+Z7ecjy91TnN9s877X2YZtrzT9tinfb3p20L03JDBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQAeAbt3xv2648vTV6+nymbbe+NW1bddr7sH0re/t5vjXt9/XW9n/P3VABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQASAgqAAQEFQA+MYt32nbqtN4/l2mvZ/TnmeaadvX02zfsj7NDRUAAoIKAAFBBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAwOfZPp7IV2+Nbn89p53nbd/XtG3k027bQn+Gnb8bKgAEBBUAAoIKAAFBBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgCBPz/DTNuK3O7t1uW0bcxpW6zTtlJ9X7tM+36nvc/buaECQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgA8I1bvm9N2zI97fQ25rTt3Gnboafft2nbradNO8/t789bt53/aW6oABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQASAgqAAQEFQACAgqAATWb/m+NW0rctq25/atzu3P89bb55/2PNvd9nm3v5+nuaECQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAELhuy5ff3dKcttV5evt32tbr6W3Vad/vbVuy0963Z/l5vuWGCgABQQWAgKACQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkDAli//6Rbo9m3Pac8/bbv1ts97eivY5931e3RDBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQASBw3ZbvtO3HaaZtjU7bFp72PNPe59Pbtqdtf/7Tz3P69/IMO8+33FABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQASAgqAAQEFQACKzf8j29rQr/5dbotK3g039/++932vNPe563tm//uqECQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEPg808YQAWAhN1QACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAgIKgAEBBUAAoIKAAFBBYCAoAJAQFABICCoABAQVAAICCoABAQVAAKCCgABQQWAgKACQEBQASAgqAAQEFQACAgqAAQEFQACggoAAUEFgICgAkBAUAEgIKgAEBBUAAgIKgAEBBUAfv7e/wHef/6aKA8AWgAAAABJRU5ErkJggg==';
 
     // Patches ONLY the Help Center right panel ([idomkey="AboutSettingItemIdABOUT_HELP"]):
@@ -1286,7 +1330,70 @@
     }
 
     setInterval(k2InjectSettingsUpdateCard, 500);
+    // Patches ONLY the Feedback panel (the one showing youtube.com/tv/feedback):
+    // URL text -> github pulls URL, QR artwork -> pulls QR. Help Center and all
+    // other panels untouched.
+    function k2PatchFeedbackPanel() {
+        try {
+            var strs = document.querySelectorAll('yt-formatted-string');
+            for (var i = 0; i < strs.length; i++) {
+                var t = strs[i].textContent || '';
+                if (t.indexOf('youtube.com/tv/feedback') === -1) continue;
+                strs[i].textContent = t.split('youtube.com/tv/feedback').join(K2_GITHUB_PULLS_URL_TEXT);
+                var scope = null;
+                try { scope = strs[i].closest('[idomkey]') || strs[i].parentElement; } catch (e0) {}
+                if (!scope || scope === document) continue;
+                var thumbs = scope.querySelectorAll ? scope.querySelectorAll('ytlr-thumbnail-details') : [];
+                for (var j = 0; j < thumbs.length; j++) {
+                    var current = '';
+                    try { current = thumbs[j].style.backgroundImage || ''; } catch (e1) {}
+                    if (!current) {
+                        try {
+                            var cs = window.getComputedStyle(thumbs[j]);
+                            if (cs) current = cs.backgroundImage || '';
+                        } catch (e2) {}
+                    }
+                    if (current && current.indexOf('data:image') !== -1 &&
+                        current.indexOf(K2_GITHUB_PULLS_QR_DATA_URL) === -1) {
+                        thumbs[j].style.setProperty('background-image', 'url("' + K2_GITHUB_PULLS_QR_DATA_URL + '")', 'important');
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[ZeroAd] Error patching feedback panel:', e);
+        }
+    }
+
+    // Near-instant DOM fallback: patch help/feedback panels the moment they are
+    // inserted (microtask, pre-paint) instead of waiting for the 1s interval.
+    // Gated on element insertions + 300ms throttle to stay cheap during playback.
+    try {
+        if (window.MutationObserver) {
+            var _k2PanelPatchAt = 0;
+            var _k2ObsRoot = document.documentElement || document;
+            var _k2PanelObserver = new MutationObserver(function(muts) {
+                try {
+                    var now = Date.now();
+                    if (now - _k2PanelPatchAt < 300) return;
+                    for (var i = 0; i < muts.length; i++) {
+                        var an = muts[i].addedNodes;
+                        for (var j = 0; j < an.length; j++) {
+                            if (an[j] && an[j].nodeType === 1) {
+                                _k2PanelPatchAt = now;
+                                k2PatchHelpCenterPanel();
+                                k2PatchFeedbackPanel();
+                                return;
+                            }
+                        }
+                    }
+                } catch (e) {}
+            });
+            _k2PanelObserver.observe(_k2ObsRoot, { childList: true, subtree: true });
+        }
+    } catch (e) {}
+
     setInterval(k2PatchHelpCenterPanel, 1000);
+    setInterval(k2PatchFeedbackPanel, 1000);
 
     console.log("[ZeroAd] Ultra-Clean Zero-Ad Engine v8 fully engaged.");
 })();
