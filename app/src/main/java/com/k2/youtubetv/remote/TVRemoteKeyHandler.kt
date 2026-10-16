@@ -30,6 +30,13 @@ class TVRemoteKeyHandler(
             return false
         }
 
+        // Key repeats (held button): BACK/ESCAPE repeats are consumed silently so
+        // a held Back cannot spam the JS bridge or trip the double-back exit.
+        // All other repeats flow to the WebView untouched (native fast-scroll).
+        if (event.repeatCount > 0 && (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE)) {
+            return true
+        }
+
         val webView = webViewProvider() ?: return false
 
         return when (keyCode) {
@@ -198,29 +205,36 @@ class TVRemoteKeyHandler(
                     return 'NEEDS_ESCAPE:menu';
                 }
 
-                // 2. Check if a video is active or in Watch screen
-                var isVideoActive = false;
+                // 2. Watch-screen video? Browse-grid previews MUST NOT count as
+                // active video: their currentTime/readyState persist after pausing
+                // and would permanently trap every browse-Back in the video branch
+                // (Back appears dead: previews just get re-killed, focus never moves).
                 var vids = document.querySelectorAll('video');
-                for (var i = 0; i < vids.length; i++) {
-                    if (!vids[i].paused || vids[i].currentTime > 0 || vids[i].readyState >= 1) {
-                        isVideoActive = true;
-                    }
-                }
-                var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
-                if (player) {
-                    if (typeof player.getPlayerState === 'function') {
-                        var s = player.getPlayerState();
-                        if (s === 1 || s === 2 || s === 3) isVideoActive = true;
-                    }
-                    if (player.classList && player.classList.contains('playing-mode')) isVideoActive = true;
-                }
                 var curHref = window.location.href;
                 var curHash = window.location.hash || '';
-                if (curHref.indexOf('/watch') !== -1 || curHash.indexOf('watch') !== -1) {
-                    isVideoActive = true;
-                }
-                if (document.querySelector('ytlr-watch-metadata-renderer, ytlr-player-controls')) {
-                    isVideoActive = true;
+                var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+                var onWatch = (curHref.indexOf('/watch') !== -1 || curHash.indexOf('watch') !== -1 ||
+                               !!player || !!document.querySelector('ytlr-watch-metadata-renderer, ytlr-player-controls'));
+                var isVideoActive = false;
+                if (onWatch) {
+                    for (var i = 0; i < vids.length; i++) {
+                        if (!vids[i].paused || vids[i].currentTime > 0 || vids[i].readyState >= 1) {
+                            isVideoActive = true;
+                        }
+                    }
+                    if (player) {
+                        if (typeof player.getPlayerState === 'function') {
+                            var s = player.getPlayerState();
+                            if (s === 1 || s === 2 || s === 3) isVideoActive = true;
+                        }
+                        if (player.classList && player.classList.contains('playing-mode')) isVideoActive = true;
+                    }
+                    isVideoActive = true; // on a watch screen, Back always exits playback
+                } else {
+                    // Browse previews: silence quietly without navigating.
+                    for (var si = 0; si < vids.length; si++) {
+                        try { if (!vids[si].paused) vids[si].pause(); } catch (e15) {}
+                    }
                 }
 
                 if (isVideoActive) {
@@ -262,8 +276,30 @@ class TVRemoteKeyHandler(
                     return 'NEEDS_ESCAPE:subpage';
                 }
 
-                // 4. Truly at root home: NEVER fire Escape or Back into WebView!
-                // Firing Escape at root home causes Kabuki to pop the stack and crash into the Account Selector!
+                // 4. Root home: first Back moves focus to the left rail instead of
+                // starting the exit countdown. NEVER fire Escape/Back keys here
+                // (Kabuki pops the stack into the Account Selector!).
+                // Exit countdown starts only once focus is already in the rail.
+                var inRail = false;
+                try {
+                    var _ae2 = document.activeElement;
+                    if (_ae2 && _ae2.closest && _ae2.closest('ytlr-guide-response')) inRail = true;
+                } catch (e12) {}
+                if (!inRail) {
+                    var railMoved = false;
+                    try {
+                        var entries = document.querySelectorAll('ytlr-guide-entry-renderer');
+                        for (var gi = 0; gi < entries.length; gi++) {
+                            var er = entries[gi].getBoundingClientRect();
+                            if (er.width <= 0 || er.height <= 0) continue;
+                            var eb = entries[gi].querySelector('ytlr-button, button, a') || entries[gi];
+                            try { eb.focus(); } catch (e13) {}
+                            if (document.activeElement === eb || entries[gi].contains(document.activeElement)) { railMoved = true; }
+                            break;
+                        }
+                    } catch (e14) {}
+                    if (railMoved) return 'HANDLED_SIDEBAR';
+                }
                 return 'ROOT_HOME';
             })();
         """.trimIndent()
@@ -271,7 +307,7 @@ class TVRemoteKeyHandler(
         webView.evaluateJavascript(script) { result ->
             val cleanedResult = result?.replace("\"", "") ?: ""
             Log.d(TAG, "Back navigation result: $cleanedResult")
-            if (cleanedResult.startsWith("NEEDS_ESCAPE") || cleanedResult.startsWith("HANDLED_MENU")) {
+            if (cleanedResult.startsWith("NEEDS_ESCAPE") || cleanedResult.startsWith("HANDLED_MENU") || cleanedResult.startsWith("HANDLED_SIDEBAR")) {
                 if (cleanedResult.startsWith("NEEDS_ESCAPE")) {
                     // Dispatch real trusted Escape key to WebView so Blink processes it natively
                     webView.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ESCAPE))

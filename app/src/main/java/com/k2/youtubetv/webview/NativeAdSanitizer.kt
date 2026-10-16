@@ -83,6 +83,19 @@ object NativeAdSanitizer {
                 }
             }
 
+            // 1c. Help/feedback URLs to GitHub (direct string values in
+            // HTML-embedded payloads; the JS hook covers the fetch/XHR path).
+            if (obj.opt(key) is String) {
+                val s = obj.optString(key)
+                if (s.contains("youtube.com/tv_help")) {
+                    obj.put(key, s.replace("youtube.com/tv_help", "github.com/k2love/YT_AC"))
+                    continue
+                } else if (s.contains("youtube.com/tv/feedback")) {
+                    obj.put(key, s.replace("youtube.com/tv/feedback", "github.com/k2love/YT_AC/pulls"))
+                    continue
+                }
+            }
+
             // 2. Pure ad objects -> Remove entirely
             if (AD_KEYS_TO_REMOVE.contains(lower)) {
                 obj.remove(key)
@@ -108,6 +121,14 @@ object NativeAdSanitizer {
                 }
             } else if (item is JSONArray) {
                 cleanJsonArray(item)
+            } else if (item is String) {
+                // Help/feedback URLs inside arrays (renderer texts[]) never reach
+                // cleanJsonObject: rewrite them here (HTML-embedded payload path).
+                if (item.contains("youtube.com/tv_help")) {
+                    arr.put(i, item.replace("youtube.com/tv_help", "github.com/k2love/YT_AC"))
+                } else if (item.contains("youtube.com/tv/feedback")) {
+                    arr.put(i, item.replace("youtube.com/tv/feedback", "github.com/k2love/YT_AC/pulls"))
+                }
             }
         }
     }

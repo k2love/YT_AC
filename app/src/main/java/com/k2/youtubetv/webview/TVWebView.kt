@@ -11,6 +11,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import com.k2.youtubetv.BuildConfig
 
 class TVWebView @JvmOverloads constructor(
     context: Context,
@@ -25,6 +26,10 @@ class TVWebView @JvmOverloads constructor(
     }
 
     init {
+        if (BuildConfig.DEBUG) {
+            // Remote DOM inspection via chrome://inspect / CDP (debug builds only).
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
         initTVWebSettings()
         setupDocumentStartScript()
     }

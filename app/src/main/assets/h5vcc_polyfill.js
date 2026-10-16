@@ -1005,6 +1005,10 @@
         window._k2GlobalKeySetup = true;
 
         window.addEventListener('keydown', function(e) {
+            // Ignore key repeats: holding DOWN/UP must fast-scroll natively.
+            // Re-firing focus jumps + .click() on every repeat ejects focus
+            // out of the settings list (e.g. all the way to the Shorts rail).
+            if (e.repeat) return;
             var myTab = document.getElementById('yt-ac-settings-update-banner');
             if (!myTab) return;
 
@@ -1097,11 +1101,28 @@
     // Patches ONLY the Help Center right panel ([idomkey="AboutSettingItemIdABOUT_HELP"]):
     // swaps the QR background to the GitHub repo QR and rewrites the help URL text.
     // Strictly scoped - 'Send feedback' (의견 보내기) and all other panels untouched.
+    // Tag-agnostic text replacement inside a scope (a URL may live in a plain
+    // DIV/SPAN, not only yt-formatted-string). Layout-safe: only text node
+    // values change, no elements are added or restyled.
+    function k2ReplaceTextIn(scope, from, to) {
+        try {
+            var walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, null);
+            var nodes = [], nd = null;
+            while ((nd = walker.nextNode())) nodes.push(nd);
+            for (var i = 0; i < nodes.length; i++) {
+                var v = nodes[i].nodeValue;
+                if (v && v.indexOf(from) !== -1) nodes[i].nodeValue = v.split(from).join(to);
+            }
+        } catch (e) {}
+    }
+
     function k2PatchHelpCenterPanel() {
         try {
-            var panel = document.querySelector('[idomkey="AboutSettingItemIdABOUT_HELP"]');
-            if (!panel) return;
+            var panels = document.querySelectorAll('[idomkey="AboutSettingItemIdABOUT_HELP"]');
+            if (!panels.length) return;
 
+            for (var pi = 0; pi < panels.length; pi++) {
+            var panel = panels[pi];
             // 1. QR code background (ytlr-thumbnail-details holds style.backgroundImage = url(...))
             var thumbs = panel.querySelectorAll('ytlr-thumbnail-details');
             for (var i = 0; i < thumbs.length; i++) {
@@ -1123,17 +1144,17 @@
                 }
             }
 
-            // 2. Help URL text (youtube.com/tv_help -> github.com/k2love/YT_AC)
-            var strs = panel.querySelectorAll('yt-formatted-string');
-            for (var j = 0; j < strs.length; j++) {
-                var t = strs[j].textContent || '';
-                if (t.indexOf('youtube.com/tv_help') !== -1) {
-                    strs[j].textContent = t.split('youtube.com/tv_help').join(K2_GITHUB_URL_TEXT);
-                    if (!window._k2HelpLogged) {
-                        console.log('[ZeroAd] Help Center URL replaced with GitHub repo URL.');
-                    }
+            // 2. Help URL text (youtube.com/tv_help -> github.com/k2love/YT_AC).
+            // Tag-agnostic via text-node walker: the URL may sit in a DIV/SPAN.
+            (function() {
+                var had = false;
+                try { had = (panel.textContent || '').indexOf('youtube.com/tv_help') !== -1; } catch (e9) {}
+                k2ReplaceTextIn(panel, 'youtube.com/tv_help', K2_GITHUB_URL_TEXT);
+                if (had && !window._k2HelpLogged) {
+                    console.log('[ZeroAd] Help Center URL replaced with GitHub repo URL.');
                 }
-            }
+            })();
+            } // panels loop
 
             window._k2HelpLogged = true;
         } catch (e) {
@@ -1335,15 +1356,27 @@
     // other panels untouched.
     function k2PatchFeedbackPanel() {
         try {
-            var strs = document.querySelectorAll('yt-formatted-string');
-            for (var i = 0; i < strs.length; i++) {
-                var t = strs[i].textContent || '';
+            // The feedback URL lives in a plain DIV (not yt-formatted-string):
+            // scan visible setting-action panels for the marker text instead.
+            var panels = document.querySelectorAll('ytlr-setting-action-renderer');
+            for (var i = 0; i < panels.length; i++) {
+                var p = panels[i];
+                if (p._k2FbPatched) continue;
+                var r = null;
+                try { r = p.getBoundingClientRect(); } catch (e3) {}
+                if (!r || r.width <= 0 || r.height <= 0) continue;
+                var t = '';
+                try { t = p.textContent || ''; } catch (e4) {}
                 if (t.indexOf('youtube.com/tv/feedback') === -1) continue;
-                strs[i].textContent = t.split('youtube.com/tv/feedback').join(K2_GITHUB_PULLS_URL_TEXT);
-                var scope = null;
-                try { scope = strs[i].closest('[idomkey]') || strs[i].parentElement; } catch (e0) {}
-                if (!scope || scope === document) continue;
-                var thumbs = scope.querySelectorAll ? scope.querySelectorAll('ytlr-thumbnail-details') : [];
+                k2ReplaceTextIn(p, 'youtube.com/tv/feedback', K2_GITHUB_PULLS_URL_TEXT);
+                p._k2FbPatched = true;
+                if (!window._k2FbLogged) {
+                    window._k2FbLogged = true;
+                    console.log('[ZeroAd] Feedback URL replaced with GitHub pulls URL.');
+                }
+                // QR thumbs in scope (the feedback panel currently shows an
+                // illustration instead of a QR; kept future-proof).
+                var thumbs = p.querySelectorAll ? p.querySelectorAll('ytlr-thumbnail-details') : [];
                 for (var j = 0; j < thumbs.length; j++) {
                     var current = '';
                     try { current = thumbs[j].style.backgroundImage || ''; } catch (e1) {}
