@@ -22,6 +22,11 @@ class TVWebViewClient(private val context: Context) : WebViewClient() {
     companion object {
         private const val TAG = "TVWebViewClient"
 
+        // Bump whenever patch logic changes: patched JS/CSS are cached on disk
+        // keyed by URL, so without a version in the key, updated patches would
+        // never take effect until the 24h cache entry expires.
+        private const val PATCH_VERSION = 3
+
         // CSS gradient functions neutralized to kill Kabuki scrim overlays.
         // Order matters: longest names first so "-webkit-linear-gradient" is not
         // partially matched as "linear-gradient".
@@ -66,7 +71,7 @@ class TVWebViewClient(private val context: Context) : WebViewClient() {
 
     private fun getCachedPatchedResponse(url: String, mimeType: String): WebResourceResponse? {
         val cleanUrl = url.substringBefore("#")
-        val cacheKey = cleanUrl.hashCode().toString() + "_" + mimeType.replace("/", "_") + ".bin"
+        val cacheKey = "v" + PATCH_VERSION + "_" + cleanUrl.hashCode().toString() + "_" + mimeType.replace("/", "_") + ".bin"
         val file = File(patchedCacheDir, cacheKey)
         if (file.exists() && file.length() > 0) {
             val age = System.currentTimeMillis() - file.lastModified()
@@ -92,7 +97,7 @@ class TVWebViewClient(private val context: Context) : WebViewClient() {
     private fun savePatchedResponseToCache(url: String, mimeType: String, bytes: ByteArray) {
         try {
             val cleanUrl = url.substringBefore("#")
-            val cacheKey = cleanUrl.hashCode().toString() + "_" + mimeType.replace("/", "_") + ".bin"
+            val cacheKey = "v" + PATCH_VERSION + "_" + cleanUrl.hashCode().toString() + "_" + mimeType.replace("/", "_") + ".bin"
             val file = File(patchedCacheDir, cacheKey)
             file.writeBytes(bytes)
         } catch (e: Exception) {
@@ -315,6 +320,38 @@ class TVWebViewClient(private val context: Context) : WebViewClient() {
                 js = js.replace(wCapRegex, "var g=4320;")
                 Log.d(TAG, "[4K-Unlock] default-quality-cap patch applied x$wCapCount")
                 if (wCapCount == 0) Log.w(TAG, "[4K-Unlock] default-quality-cap pattern NOT found — check obfuscation drift!")
+
+                // Patch w$n live/HFR/random caps (each flag string occurs exactly once
+                // in tv-player-ias.js). Renaming the flag makes ar() return undefined
+                // so the Math.min clamp is skipped:
+                // - html5_live_quality_cap: clamps EVERY live playback (e.g. to 480p)
+                // - html5_hfr_quality_cap: clamps whenever any variant is fps>32,
+                //   i.e. all 720p60/1080p60 live renditions
+                // - html5_random_playback_cap: nonce dice-roll cap on any playback
+                val extraCaps = mapOf(
+                    "html5_live_quality_cap" to "live",
+                    "html5_hfr_quality_cap" to "hfr",
+                    "html5_random_playback_cap" to "random"
+                )
+                for ((flag, label) in extraCaps) {
+                    val count = js.split("\"$flag\"").size - 1
+                    js = js.replace("\"$flag\"", "\"${flag}_k2off\"")
+                    Log.d(TAG, "[4K-Unlock] $label-quality-cap flag disabled x$count")
+                    if (count == 0) Log.w(TAG, "[4K-Unlock] $flag NOT found — check obfuscation drift!")
+                }
+
+                // Patch gv() HFR gate: formats with fps>32 are blocked with "capHfr"
+                // unless v.Fx or HH(FRAMERATE) passes. The HH sanity probe pairs a
+                // realistic value (framerate=30) with an impossible one
+                // (framerate=9999) and our MSE layer must answer both truthfully,
+                // which flips the verdict on clients whose WebView ignores the
+                // extended params. Neutralize the gate itself (single occurrence):
+                // 60fps HD then flows into the (already uncapped) ladder and ABR.
+                val hfrGate = "if(!v.Fx&&!HH(v,j6.FRAMERATE))return\"capHfr\";"
+                val hfrCount = js.split(hfrGate).size - 1
+                js = js.replace(hfrGate, "if(!1)return\"capHfr\";")
+                Log.d(TAG, "[4K-Unlock] HFR capHfr gate disabled x$hfrCount")
+                if (hfrCount == 0) Log.w(TAG, "[4K-Unlock] capHfr gate NOT found — check obfuscation drift!")
             }
 
             val bytes = js.toByteArray(Charsets.UTF_8)

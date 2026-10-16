@@ -23,6 +23,16 @@
             window.MediaSource.isTypeSupported = function(mimeType) {
                 if (!mimeType) return false;
                 var lower = mimeType.toLowerCase();
+                // Physical sanity probes (e.g. framerate=9999, width=99999, or a
+                // bitrate no decoder claims) MUST receive the genuine device
+                // answer. The player cross-checks a realistic probe against an
+                // impossible one to catch lying implementations; a blanket `true`
+                // flips its capability verdict, which blocks every >32fps format
+                // (capHfr) and pins live ladders at 480p. Bare codec queries
+                // (format listing) keep the affirmed answer below.
+                if (/;\s*(width|height|framerate|bitrate|bit-depth|channels)\s*=/.test(lower)) {
+                    try { return origIsTypeSupported(mimeType); } catch (e0) { return false; }
+                }
                 // Video: VP8/VP9/AV1/H.264 (proven decodable via WebView MSE).
                 // NOTE: HEVC (hev1/hvc1) is deliberately NOT affirmed: claiming an
                 // undecodable codec makes ABR pick it, fail, and cascade down to
