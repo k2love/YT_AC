@@ -1737,6 +1737,26 @@
         } catch (eHookPl) {}
     }
 
+    window.k2OnSpeedChange = function(rate) {
+        try {
+            var r = Number(rate);
+            if (!isNaN(r) && r > 0) {
+                window._k2CurrentSpeed = r;
+                var v = document.querySelector('video');
+                if (v && Math.abs(v.playbackRate - r) > 0.01) {
+                    try { v.playbackRate = r; } catch (eV) {}
+                }
+                try {
+                    localStorage.setItem('yt-player-playback-rate', JSON.stringify({
+                        data: String(r),
+                        expiration: Date.now() + 86400000 * 30
+                    }));
+                } catch (eLs) {}
+                showSpeedOsd(r);
+            }
+        } catch (eSpeed) {}
+    };
+
     function k2EnsureSpeedOnPlaying() {
         try {
             var vids = document.querySelectorAll('video');
@@ -1745,11 +1765,6 @@
                 if (!v._k2SpeedHooked) {
                     v._k2SpeedHooked = true;
                     v.addEventListener('playing', function() {
-                        if (window._k2CurrentSpeed && window._k2CurrentSpeed !== 1.0) {
-                            this.playbackRate = window._k2CurrentSpeed;
-                        }
-                    });
-                    v.addEventListener('ratechange', function() {
                         if (window._k2CurrentSpeed && window._k2CurrentSpeed !== 1.0) {
                             if (Math.abs(this.playbackRate - window._k2CurrentSpeed) > 0.01) {
                                 this.playbackRate = window._k2CurrentSpeed;

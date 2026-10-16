@@ -363,6 +363,20 @@ class TVWebViewClient(private val context: Context) : WebViewClient() {
                 val gmCount = js.split("this.nM=gm/100").size - 1
                 js = js.replace("this.nM=gm/100", "this.nM=Math.max(4,gm/100)")
                 Log.d(TAG, "[Speed-Unlock] granular server rate clamp patched to max(4,gm/100) x$gmCount")
+
+                // 3) Hook player setPlaybackRate to always persist rate & notify bridge
+                val origSetRate = "v.getPlaybackRate()!==N&&(v.setPlaybackRate(N),L&&fa(\"yt-player-playback-rate\",N),this.Sl.DX(\"onPlaybackRateChange\",N))"
+                val patchedSetRate = "v.getPlaybackRate()!==N&&(v.setPlaybackRate(N),fa(\"yt-player-playback-rate\",N),this.Sl.DX(\"onPlaybackRateChange\",N),window.k2OnSpeedChange&&window.k2OnSpeedChange(N))"
+                val srCount = js.split(origSetRate).size - 1
+                js = js.replace(origSetRate, patchedSetRate)
+                Log.d(TAG, "[Speed-Unlock] player setPlaybackRate persistence & bridge hooked x$srCount")
+
+                // 4) Patch new video startup rate restoration (iIZ)
+                val origInitRate = "Number(ZD(\"yt-player-playback-rate\"))||1"
+                val patchedInitRate = "(window._k2CurrentSpeed||(typeof ZD===\"function\"?(function(){var x=ZD(\"yt-player-playback-rate\");return Number(x&&x.data||x);})():1)||1)"
+                val initCount = js.split(origInitRate).size - 1
+                js = js.replace(origInitRate, patchedInitRate)
+                Log.d(TAG, "[Speed-Unlock] player iIZ init rate patched x$initCount")
             }
 
             val bytes = js.toByteArray(Charsets.UTF_8)
