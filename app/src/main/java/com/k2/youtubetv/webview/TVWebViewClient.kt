@@ -566,6 +566,7 @@ class TVWebViewClient(private val context: Context) : WebViewClient() {
     override fun onPageFinished(view: WebView?, url: String?) {
         super.onPageFinished(view, url)
         Log.d(TAG, "Page finished: $url")
+        injectPolyfill(view)
     }
 
     override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {

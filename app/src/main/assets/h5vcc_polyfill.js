@@ -864,83 +864,171 @@
 
     // =========================================================================
     // 7. YouTube TV Settings Screen Update Widget Injector
-    // Injects an "App Info & Update" card into the settings menu
+    // Injects an "App Info & Update" card right above the app version in settings
     // =========================================================================
-    function k2InjectSettingsUpdateCard() {
+    function k2FindVersionElement() {
         try {
-            var isSettings = window.location.hash.indexOf('settings') !== -1 ||
-                             window.location.href.indexOf('/settings') !== -1 ||
-                             !!document.querySelector('[role="menu"][aria-label*="설정"], [role="menu"][aria-label*="Settings"], ytlr-settings-category-renderer');
-            if (!isSettings) return;
+            if (!document.body) return null;
+            var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+            var node;
+            var candidates = [];
 
-            if (document.getElementById('yt-ac-settings-update-banner')) return;
+            while (node = walker.nextNode()) {
+                var txt = (node.nodeValue || '').trim();
+                if (!txt) continue;
 
-            // Find an optimal settings container
-            var container = document.querySelector('ytlr-settings-category-renderer, [role="menu"], #settings-content, .settings-container, #container');
-            if (!container) return;
-
-            var card = document.createElement('div');
-            card.id = 'yt-ac-settings-update-banner';
-            card.setAttribute('tabindex', '0');
-            card.setAttribute('role', 'button');
-            card.setAttribute('aria-label', '최신 앱 업데이트 확인');
-            card.style.cssText = 'margin: 12px 20px; padding: 14px 20px; background: rgba(255,255,255,0.08); border: 2px solid transparent; border-radius: 10px; cursor: pointer; outline: none; transition: all 0.2s; display: block;';
-
-            card.innerHTML = '<div style="font-size: 18px; font-weight: bold; color: #FFFFFF; display: flex; align-items: center; gap: 8px;">🔄 최신 앱 업데이트 확인</div>' +
-                             '<div style="font-size: 13px; color: #AAAAAA; margin-top: 4px;">리모컨 선택 시 최신 빌드 즉시 확인 및 다운로드 설치</div>';
-
-            card.addEventListener('focus', function() {
-                card.style.background = 'rgba(255,255,255,0.22)';
-                card.style.borderColor = '#3EA6FF';
-                card.style.boxShadow = '0 0 10px rgba(62, 166, 255, 0.5)';
-                card.style.transform = 'scale(1.02)';
-            });
-            card.addEventListener('blur', function() {
-                card.style.background = 'rgba(255,255,255,0.08)';
-                card.style.borderColor = 'transparent';
-                card.style.boxShadow = 'none';
-                card.style.transform = 'scale(1)';
-            });
-
-            function triggerCheck() {
-                if (window.YT_TV_APP && typeof window.YT_TV_APP.checkAppUpdate === 'function') {
-                    window.YT_TV_APP.checkAppUpdate();
+                // Ignore text inside our own update card
+                if (node.parentElement && node.parentElement.closest('#yt-ac-settings-update-banner')) {
+                    continue;
                 }
-            }
 
-            card.addEventListener('click', triggerCheck);
-            card.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' || e.keyCode === 13) {
-                    triggerCheck();
-                }
-            });
+                // Match version indicators: "앱 버전", "App version", "버전: ", "Version: ", "버전"
+                var isExactVersion = /^(앱\s*버전|app\s*version)/i.test(txt);
+                var isVersionPrefix = /^(버전|version)\s*[:：0-9vV]/i.test(txt);
+                var isVersionWord = (txt.length <= 20 && /(앱\s*버전|app\s*version|버전|version|build)/i.test(txt));
 
-            // Look for the app version item at the bottom of settings to place button right above it
-            var allItems = document.querySelectorAll('ytlr-settings-category-renderer, [role="menuitem"], [role="option"], ytlr-compact-settings-item, tp-yt-paper-item, .settings-item, button');
-            var versionItem = null;
-            for (var i = allItems.length - 1; i >= 0; i--) {
-                var txt = (allItems[i].innerText || allItems[i].textContent || '').trim();
-                if (/버전|version|app\s*version|빌드|build/i.test(txt)) {
-                    if (container.contains(allItems[i])) {
-                        versionItem = allItems[i];
-                        break;
+                if (isExactVersion || isVersionPrefix || isVersionWord) {
+                    var el = node.parentElement;
+                    if (el && el.offsetParent !== null) { // visible in rendered layout
+                        candidates.push({ el: el, exact: isExactVersion });
+                        if (isExactVersion) break; // highest priority match
                     }
                 }
             }
 
-            if (versionItem && versionItem.parentNode) {
-                versionItem.parentNode.insertBefore(card, versionItem);
-                console.log('[ZeroAd] Settings update card injected RIGHT ABOVE app version item.');
-            } else if (container.lastElementChild) {
-                container.insertBefore(card, container.lastElementChild);
-                console.log('[ZeroAd] Settings update card injected before last element of settings.');
-            } else {
-                container.appendChild(card);
+            if (candidates.length === 0) return null;
+
+            // Pick the best candidate (exact matches first, otherwise the last visible occurrence)
+            var target = candidates[0].exact ? candidates[0].el : candidates[candidates.length - 1].el;
+
+            // Ascend upward to find the full row / item container
+            var curr = target;
+            var row = curr;
+            while (curr && curr.parentElement && curr.parentElement !== document.body) {
+                var p = curr.parentElement;
+                var tag = (curr.tagName || '').toLowerCase();
+                var role = curr.getAttribute('role') || '';
+
+                if (tag.indexOf('ytlr-') === 0 ||
+                    role === 'menuitem' || role === 'listitem' || role === 'option' || role === 'button' ||
+                    curr.classList.contains('ytlr-compact-settings-item') ||
+                    curr.classList.contains('ytlr-item-section-renderer') ||
+                    curr.classList.contains('settings-item') ||
+                    (p.children.length > 1 && curr.offsetHeight >= 24 && curr.offsetWidth >= 100)) {
+                    row = curr;
+                    break;
+                }
+                curr = p;
             }
-        } catch (e) {}
+            return row;
+        } catch (e) {
+            return null;
+        }
     }
 
-    setInterval(k2InjectSettingsUpdateCard, 1500);
+    function k2InjectSettingsUpdateCard() {
+        try {
+            var versionRow = k2FindVersionElement();
+            var existingCard = document.getElementById('yt-ac-settings-update-banner');
+
+            if (versionRow && versionRow.parentNode) {
+                // If card exists, make sure it is right before the versionRow
+                if (existingCard) {
+                    if (existingCard.nextElementSibling !== versionRow && existingCard !== versionRow) {
+                        versionRow.parentNode.insertBefore(existingCard, versionRow);
+                        console.log('[ZeroAd] Repositioned update card right above versionRow.');
+                    }
+                    return;
+                }
+
+                // Create fresh card
+                var card = document.createElement('div');
+                card.id = 'yt-ac-settings-update-banner';
+                card.setAttribute('tabindex', '0');
+                card.setAttribute('role', 'button');
+                card.setAttribute('aria-label', '최신 앱 업데이트 확인');
+                card.style.cssText = 'display: block; margin: 10px 16px; padding: 14px 20px; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.25); border-radius: 12px; cursor: pointer; outline: none; box-sizing: border-box; transition: all 0.18s ease;';
+
+                card.innerHTML = '<div class="yt-ac-title" style="font-size: 18px; font-weight: bold; color: #FFFFFF; display: flex; align-items: center; gap: 8px;">🔄 최신 앱 업데이트 확인</div>' +
+                                 '<div class="yt-ac-subtitle" style="font-size: 13px; color: #AAAAAA; margin-top: 4px;">리모컨 선택(OK) 시 최신 APK 업데이트 확인 및 즉시 설치</div>';
+
+                card.addEventListener('focus', function() {
+                    card.style.background = '#FFFFFF';
+                    card.style.borderColor = '#FFFFFF';
+                    card.style.boxShadow = '0 0 16px rgba(255,255,255,0.85)';
+                    card.style.transform = 'scale(1.02)';
+                    var t = card.querySelector('.yt-ac-title');
+                    var st = card.querySelector('.yt-ac-subtitle');
+                    if (t) t.style.color = '#0F0F0F';
+                    if (st) st.style.color = '#555555';
+                });
+
+                card.addEventListener('blur', function() {
+                    card.style.background = 'rgba(255,255,255,0.08)';
+                    card.style.borderColor = 'rgba(255,255,255,0.25)';
+                    card.style.boxShadow = 'none';
+                    card.style.transform = 'scale(1)';
+                    var t = card.querySelector('.yt-ac-title');
+                    var st = card.querySelector('.yt-ac-subtitle');
+                    if (t) t.style.color = '#FFFFFF';
+                    if (st) st.style.color = '#AAAAAA';
+                });
+
+                function triggerCheck() {
+                    console.log('[ZeroAd] Settings update button activated.');
+                    if (window.YT_TV_APP && typeof window.YT_TV_APP.checkAppUpdate === 'function') {
+                        window.YT_TV_APP.checkAppUpdate();
+                    }
+                }
+
+                card.addEventListener('click', triggerCheck);
+                card.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.keyCode === 13) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        triggerCheck();
+                    }
+                });
+
+                versionRow.parentNode.insertBefore(card, versionRow);
+                console.log('[ZeroAd] Successfully injected update card right above versionRow!');
+                return;
+            }
+
+            // Fallback: If versionRow not found, but we are inside settings pane
+            if (!existingCard) {
+                var fallbackContainer = document.querySelector('ytlr-about-renderer, ytlr-settings-category-renderer, [role="menu"][aria-label*="설정"], [role="menu"][aria-label*="Settings"]');
+                if (fallbackContainer) {
+                    var fbCard = document.createElement('div');
+                    fbCard.id = 'yt-ac-settings-update-banner';
+                    fbCard.setAttribute('tabindex', '0');
+                    fbCard.setAttribute('role', 'button');
+                    fbCard.setAttribute('aria-label', '최신 앱 업데이트 확인');
+                    fbCard.style.cssText = 'display: block; margin: 10px 16px; padding: 14px 20px; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.25); border-radius: 12px; cursor: pointer; outline: none; box-sizing: border-box;';
+                    fbCard.innerHTML = '<div class="yt-ac-title" style="font-size: 18px; font-weight: bold; color: #FFFFFF;">🔄 최신 앱 업데이트 확인</div>' +
+                                       '<div class="yt-ac-subtitle" style="font-size: 13px; color: #AAAAAA; margin-top: 4px;">리모컨 선택 시 최신 APK 즉시 확인</div>';
+                    fbCard.addEventListener('click', function() {
+                        if (window.YT_TV_APP && typeof window.YT_TV_APP.checkAppUpdate === 'function') {
+                            window.YT_TV_APP.checkAppUpdate();
+                        }
+                    });
+                    fbCard.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter' || e.keyCode === 13) {
+                            if (window.YT_TV_APP && typeof window.YT_TV_APP.checkAppUpdate === 'function') {
+                                window.YT_TV_APP.checkAppUpdate();
+                            }
+                        }
+                    });
+                    fallbackContainer.appendChild(fbCard);
+                    console.log('[ZeroAd] Injected update card into fallback settings container.');
+                }
+            }
+        } catch (e) {
+            console.warn('[ZeroAd] Error injecting settings update card:', e);
+        }
+    }
+
+    setInterval(k2InjectSettingsUpdateCard, 800);
 
     console.log("[ZeroAd] Ultra-Clean Zero-Ad Engine v8 fully engaged.");
 })();
