@@ -1699,11 +1699,14 @@
         setTimeout(function() { window._k2SpeedChanging = false; }, 1200);
     }
 
+    window._k2InternalRateChange = false;
+
     window.k2SetPlaybackRate = function(rate) {
         try {
             var r = Number(rate);
             if (isNaN(r) || r < 0.25 || r > 4.0) return;
             window._k2CurrentSpeed = r;
+            window._k2InternalRateChange = true;
 
             var vids = document.querySelectorAll('video');
             for (var i = 0; i < vids.length; i++) {
@@ -1728,7 +1731,9 @@
             } catch (eStore) {}
 
             showSpeedOsd(r);
+            setTimeout(function() { window._k2InternalRateChange = false; }, 300);
         } catch (eSetRate) {
+            window._k2InternalRateChange = false;
             console.warn('[ZeroAd] Error setting playback rate:', eSetRate);
         }
     };
@@ -1766,19 +1771,21 @@
                     player.setPlaybackRate = function(rate) {
                         var r = Number(rate);
                         if (!isNaN(r) && r > 0) {
-                            window._k2CurrentSpeed = r;
-                            var v = document.querySelector('video');
-                            if (v) {
-                                v.playbackRate = r;
-                                k2ProtectAgainstStall(v);
+                            if (!window._k2InternalRateChange) {
+                                window._k2CurrentSpeed = r;
+                                var v = document.querySelector('video');
+                                if (v) {
+                                    v.playbackRate = r;
+                                    k2ProtectAgainstStall(v);
+                                }
+                                try {
+                                    localStorage.setItem('yt-player-playback-rate', JSON.stringify({
+                                        data: String(r),
+                                        expiration: Date.now() + 86400000 * 30
+                                    }));
+                                } catch (eLs) {}
+                                showSpeedOsd(r);
                             }
-                            try {
-                                localStorage.setItem('yt-player-playback-rate', JSON.stringify({
-                                    data: String(r),
-                                    expiration: Date.now() + 86400000 * 30
-                                }));
-                            } catch (eLs) {}
-                            showSpeedOsd(r);
                         }
                         return origSetRate.apply(this, arguments);
                     };
@@ -1791,21 +1798,23 @@
         try {
             var r = Number(rate);
             if (!isNaN(r) && r > 0) {
-                window._k2CurrentSpeed = r;
-                var v = document.querySelector('video');
-                if (v) {
-                    if (Math.abs(v.playbackRate - r) > 0.01) {
-                        try { v.playbackRate = r; } catch (eV) {}
+                if (!window._k2InternalRateChange) {
+                    window._k2CurrentSpeed = r;
+                    var v = document.querySelector('video');
+                    if (v) {
+                        if (Math.abs(v.playbackRate - r) > 0.01) {
+                            try { v.playbackRate = r; } catch (eV) {}
+                        }
+                        k2ProtectAgainstStall(v);
                     }
-                    k2ProtectAgainstStall(v);
+                    try {
+                        localStorage.setItem('yt-player-playback-rate', JSON.stringify({
+                            data: String(r),
+                            expiration: Date.now() + 86400000 * 30
+                        }));
+                    } catch (eLs) {}
+                    showSpeedOsd(r);
                 }
-                try {
-                    localStorage.setItem('yt-player-playback-rate', JSON.stringify({
-                        data: String(r),
-                        expiration: Date.now() + 86400000 * 30
-                    }));
-                } catch (eLs) {}
-                showSpeedOsd(r);
             }
         } catch (eSpeed) {}
     };
@@ -1817,6 +1826,22 @@
                 var v = vids[i];
                 if (!v._k2SpeedHooked) {
                     v._k2SpeedHooked = true;
+                    v.addEventListener('ratechange', function() {
+                        var r = Number(this.playbackRate);
+                        if (!isNaN(r) && r > 0) {
+                            if (!window._k2InternalRateChange && Math.abs((window._k2CurrentSpeed || 1.0) - r) > 0.01) {
+                                window._k2CurrentSpeed = r;
+                                try {
+                                    localStorage.setItem('yt-player-playback-rate', JSON.stringify({
+                                        data: String(r),
+                                        expiration: Date.now() + 86400000 * 30
+                                    }));
+                                } catch (eLs) {}
+                                k2ProtectAgainstStall(this);
+                                showSpeedOsd(r);
+                            }
+                        }
+                    });
                     v.addEventListener('playing', function() {
                         if (window._k2CurrentSpeed && window._k2CurrentSpeed !== 1.0) {
                             if (Math.abs(this.playbackRate - window._k2CurrentSpeed) > 0.01) {
