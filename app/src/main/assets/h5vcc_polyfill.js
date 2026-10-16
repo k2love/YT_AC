@@ -152,6 +152,34 @@
                         obj.splice(i, 1);
                         continue;
                     }
+
+                    // Purge YouTube Premium upsell tab & action renderer from settings payload
+                    if (item.tabRenderer) {
+                        var tr = item.tabRenderer;
+                        var tabTitle = '';
+                        if (tr.title) {
+                            if (typeof tr.title === 'string') tabTitle = tr.title;
+                            else if (tr.title.simpleText) tabTitle = tr.title.simpleText;
+                            else if (Array.isArray(tr.title.runs)) tabTitle = tr.title.runs.map(function(r){return r.text;}).join('');
+                        }
+                        if (/Premium|프리미엄/i.test(tabTitle)) {
+                            obj.splice(i, 1);
+                            continue;
+                        }
+                    }
+                    if (item.settingActionRenderer) {
+                        var sar = item.settingActionRenderer;
+                        var sarTitle = '';
+                        if (sar.title) {
+                            if (typeof sar.title === 'string') sarTitle = sar.title;
+                            else if (sar.title.simpleText) sarTitle = sar.title.simpleText;
+                            else if (Array.isArray(sar.title.runs)) sarTitle = sar.title.runs.map(function(r){return r.text;}).join('');
+                        }
+                        if (/Premium|프리미엄/i.test(sarTitle)) {
+                            obj.splice(i, 1);
+                            continue;
+                        }
+                    }
                 }
                 sanitizeAdsDirectly(item);
             }
@@ -673,6 +701,9 @@
                 !!document.querySelector('ytlr-browse-feed-renderer, ytlr-channel-view-model, .html5-video-player')) {
                 window._k2HasLoadedHome = true;
             }
+            if (hash.indexOf('settings') === -1 && href.indexOf('settings') === -1 && !document.querySelector('ytlr-tab-renderer')) {
+                window._k2SettingsFirstTabSynced = false;
+            }
         } catch (e) {}
     }, 1000);
 
@@ -1023,7 +1054,7 @@
             var allTabs = Array.from(document.querySelectorAll('ytlr-tab-renderer'));
             if (allTabs.length === 0) return;
 
-            // 1. Hide 'YouTube Premium 가입' tab if present & auto-switch to first visible tab
+            // 1. Hide 'YouTube Premium 가입' tab if present & purge right-side premium action renderer
             var premiumTab = null;
             for (var p = 0; p < allTabs.length; p++) {
                 var tab = allTabs[p];
@@ -1038,15 +1069,32 @@
                 }
             }
 
-            // Auto-select first visible tab if premiumTab was selected by default
-            if (premiumTab && (premiumTab.classList.contains('zylon-focus') || premiumTab.classList.contains('V0Tdtb'))) {
-                k2SetElementFocusState(premiumTab, false);
-                var firstTab = allTabs.find(function(t) {
-                    return t.style.display !== 'none' && t !== premiumTab && t.id !== 'section-header:z1' && !t.classList.contains('EtB6Qe');
-                });
-                if (firstTab) {
+            // Also purge right detail panel if it contains YouTube Premium upsell
+            var premiumRightRenderer = document.querySelector('ytlr-setting-action-renderer');
+            var hasPremiumOnRight = false;
+            if (premiumRightRenderer) {
+                var rTxt = (premiumRightRenderer.innerText || '').trim();
+                if (/Premium|프리미엄/i.test(rTxt)) {
+                    hasPremiumOnRight = true;
+                    premiumRightRenderer.style.setProperty('display', 'none', 'important');
+                }
+            }
+
+            // If premium was active or is lingering on the right screen, auto-select the first valid tab
+            var firstTab = allTabs.find(function(t) {
+                return t.style.display !== 'none' && t !== premiumTab && t.id !== 'section-header:z1' && !t.classList.contains('EtB6Qe') && t.id !== 'yt-ac-settings-update-banner';
+            });
+
+            if (firstTab) {
+                var isPremiumFocused = premiumTab && (premiumTab.classList.contains('zylon-focus') || premiumTab.classList.contains('V0Tdtb'));
+                if (isPremiumFocused || hasPremiumOnRight || !window._k2SettingsFirstTabSynced) {
+                    window._k2SettingsFirstTabSynced = true;
+                    if (premiumTab) k2SetElementFocusState(premiumTab, false);
                     var fBtn = firstTab.querySelector('ytlr-button') || firstTab;
-                    fBtn.click();
+                    try {
+                        fBtn.click();
+                        firstTab.click();
+                    } catch (e) {}
                 }
             }
 
