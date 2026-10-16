@@ -1,5 +1,6 @@
 # Built application files
 *.apk
+!/YT_TV_AC.apk
 *.aar
 *.ap_
 *.aab

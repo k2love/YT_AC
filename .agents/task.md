@@ -1,18 +1,17 @@
-# 작업 보드: 설정 메뉴 연동 및 앱 업데이트 수동 확인 시스템 구현
+# 작업 보드: 루트 APK 커밋 감지 기반 원클릭 자동 업데이트 시스템 구축
 
-- [x] 1. 계획 수립 및 GitHub 릴리즈 상태 분석 <!-- id: 0 -->
-    - [x] GitHub API 404 원인 규명 (최초 릴리즈 미발행 상태 확인)
-    - [x] 설정 화면 연동 및 리모컨 단축키 연동 설계
-    - [x] 구현 계획서(`.agents/implementation_plan_settings_update_menu_20261016.md`) 작성
-- [x] 2. `AppUpdateManager.kt` 고도화 (설정 및 피드백 다이얼로그) <!-- id: 1 -->
-    - [x] `showSettingsDialog()` 구현: 현재 버전, 기능 상태, [업데이트 확인] 버튼이 포함된 TV 스타일 설정 창
-    - [x] 404(릴리즈 미등록), 최신 버전 유지, 신규 버전 발견, 네트워크 오류 등 상황별 맞춤 AlertDialog 피드백 제공
-- [x] 3. 네이티브 및 리모컨 키 연동 <!-- id: 2 -->
-    - [x] `MainActivity.kt`: `YT_TV_APP` JavascriptInterface 브릿지 추가 (`checkAppUpdate()`, `openSettings()`)
-    - [x] `TVRemoteKeyHandler.kt`: `KEYCODE_MENU`, `KEYCODE_SETTINGS` 입력 시 설정/업데이트 창 호출
-- [x] 4. YouTube TV 웹 설정 화면 내 업데이트 카드 주입 <!-- id: 3 -->
-    - [x] `h5vcc_polyfill.js`: 설정 화면 진입 시 'YT_TV_AC 앱 정보 및 업데이트' 위젯 주입 및 클릭/포커스 이벤트 연동
-- [x] 5. 빌드 검증 및 릴리즈 연동 <!-- id: 4 -->
-    - [x] `.\gradlew.bat assembleDebug` 빌드 검증 및 `YT_TV_AC.apk` (7.38 MB) 생성 확인
-    - [x] 결과 리포트(`.agents/walkthrough_settings_update_menu_20261016.md`) 작성
-    - [x] Git 커밋 및 원격 GitHub 푸시 완료
+- [x] 1. 계획 수립 및 환경 분석 <!-- id: 0 -->
+    - [x] `TV_YouTube_Ad_Skipper`의 커밋 SHA/시간 감지 엔진 분석
+    - [x] `.gitignore` 예외 설정(`!/YT_TV_AC.apk`) 및 루트 APK 배치 계획
+    - [x] 구현 계획서(`.agents/implementation_plan_root_apk_commit_updater_20261016.md`) 작성
+- [x] 2. `.gitignore` 수정 및 루트 `YT_TV_AC.apk` 배치 <!-- id: 1 -->
+    - [x] `.gitignore`에 `!/YT_TV_AC.apk` 추가
+    - [x] `app/build/outputs/apk/debug/YT_TV_AC.apk`를 프로젝트 루트에 복사
+- [x] 3. `AppUpdateManager.kt`에 커밋 감지 엔진 이식 <!-- id: 2 -->
+    - [x] GitHub Commits API (`commits?path=YT_TV_AC.apk`) 파싱 및 `lastUpdateTime` / `SHA` 비교 로직 구현
+    - [x] `raw.githubusercontent.com` 직접 다운로드 스트리밍 및 자동 설치 연동
+    - [x] Releases API 및 Commits API를 아우르는 하이브리드 업데이트 감지 파이프라인 완성
+- [x] 4. 빌드 검증 및 깃허브 푸시 <!-- id: 3 -->
+    - [x] `.\gradlew.bat assembleDebug` 빌드 검증
+    - [x] 루트 `YT_TV_AC.apk` 포함 Git 커밋 및 푸시
+    - [x] 결과 리포트(`.agents/walkthrough_root_apk_commit_updater_20261016.md`) 작성
