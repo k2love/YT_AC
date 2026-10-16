@@ -54,7 +54,6 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             googleAuthManager.syncDeviceGoogleAccountIfAvailable()
-            appUpdateManager.checkForUpdates(isManualCheck = false)
         }
     }
 
@@ -68,7 +67,7 @@ class MainActivity : AppCompatActivity() {
                 @android.webkit.JavascriptInterface
                 fun checkAppUpdate() {
                     runOnUiThread {
-                        appUpdateManager.showSettingsDialog()
+                        appUpdateManager.checkForUpdates(isManualCheck = true)
                     }
                 }
             }, "YT_TV_APP")
@@ -76,10 +75,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadTargetUrl(intent: Intent?) {
-        val isRemoteButton = intent?.getBooleanExtra("remote_button", false) == true
-        val launchParam = if (isRemoteButton) "launch=remote" else "launch=menu"
-        val targetUrl = "$BASE_URL?$launchParam"
-
+        val targetUrl = BASE_URL
         Log.d(TAG, "Loading YouTube TV URL: $targetUrl")
         binding.webView.loadUrl(targetUrl)
     }

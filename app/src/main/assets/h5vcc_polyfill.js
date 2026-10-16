@@ -883,20 +883,22 @@
             card.id = 'yt-ac-settings-update-banner';
             card.setAttribute('tabindex', '0');
             card.setAttribute('role', 'button');
-            card.setAttribute('aria-label', 'YT_TV_AC 앱 정보 및 업데이트 확인');
-            card.style.cssText = 'margin: 16px 24px; padding: 18px 24px; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.2); border-radius: 12px; cursor: pointer; outline: none; transition: all 0.2s;';
+            card.setAttribute('aria-label', '최신 앱 업데이트 확인');
+            card.style.cssText = 'margin: 12px 20px; padding: 14px 20px; background: rgba(255,255,255,0.08); border: 2px solid transparent; border-radius: 10px; cursor: pointer; outline: none; transition: all 0.2s; display: block;';
 
-            card.innerHTML = '<div style="font-size: 20px; font-weight: bold; color: #FFFFFF; display: flex; align-items: center; gap: 8px;">🚀 YT_TV_AC 설정 및 최신 업데이트 확인</div>' +
-                             '<div style="font-size: 14px; color: #AAAAAA; margin-top: 6px;">무제한 Zero-Ad · 4K/8K 언락 · 현재 버전: v1.0.0 (리모컨 선택 시 업데이트 확인)</div>';
+            card.innerHTML = '<div style="font-size: 18px; font-weight: bold; color: #FFFFFF; display: flex; align-items: center; gap: 8px;">🔄 최신 앱 업데이트 확인</div>' +
+                             '<div style="font-size: 13px; color: #AAAAAA; margin-top: 4px;">리모컨 선택 시 최신 빌드 즉시 확인 및 다운로드 설치</div>';
 
             card.addEventListener('focus', function() {
-                card.style.background = 'rgba(255,255,255,0.2)';
+                card.style.background = 'rgba(255,255,255,0.22)';
                 card.style.borderColor = '#3EA6FF';
+                card.style.boxShadow = '0 0 10px rgba(62, 166, 255, 0.5)';
                 card.style.transform = 'scale(1.02)';
             });
             card.addEventListener('blur', function() {
                 card.style.background = 'rgba(255,255,255,0.08)';
-                card.style.borderColor = 'rgba(255,255,255,0.2)';
+                card.style.borderColor = 'transparent';
+                card.style.boxShadow = 'none';
                 card.style.transform = 'scale(1)';
             });
 
@@ -913,8 +915,28 @@
                 }
             });
 
-            container.insertBefore(card, container.firstChild);
-            console.log('[ZeroAd] Settings update card injected successfully.');
+            // Look for the app version item at the bottom of settings to place button right above it
+            var allItems = document.querySelectorAll('ytlr-settings-category-renderer, [role="menuitem"], [role="option"], ytlr-compact-settings-item, tp-yt-paper-item, .settings-item, button');
+            var versionItem = null;
+            for (var i = allItems.length - 1; i >= 0; i--) {
+                var txt = (allItems[i].innerText || allItems[i].textContent || '').trim();
+                if (/버전|version|app\s*version|빌드|build/i.test(txt)) {
+                    if (container.contains(allItems[i])) {
+                        versionItem = allItems[i];
+                        break;
+                    }
+                }
+            }
+
+            if (versionItem && versionItem.parentNode) {
+                versionItem.parentNode.insertBefore(card, versionItem);
+                console.log('[ZeroAd] Settings update card injected RIGHT ABOVE app version item.');
+            } else if (container.lastElementChild) {
+                container.insertBefore(card, container.lastElementChild);
+                console.log('[ZeroAd] Settings update card injected before last element of settings.');
+            } else {
+                container.appendChild(card);
+            }
         } catch (e) {}
     }
 

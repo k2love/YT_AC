@@ -1,19 +1,22 @@
-# 작업 보드: 뒤로가기 시 계정 선택 화면 전환 원천 차단 및 안정적 뒤로가기 시스템 구축
+# 작업 보드: 초반 로딩 속도 최적화, 2160p 뒤로가기 복구, 설정 내 업데이트 확인 버튼 배치
 
-- [x] 1. 문제 분석 및 계획 수립 <!-- id: 0 -->
-    - [x] YouTube TV(Kabuki) 라우터 `_.n.Fg` 및 `requestAccountSelectorCommand` 역공학 분석
-    - [x] `TVRemoteKeyHandler.kt`의 다중 키 머신건 발사 및 홈 화면 Escape 발사 결함 식별
-    - [x] 구현 계획서(`.agents/implementation_plan_back_navigation_account_fix_20261016.md`) 작성
-- [x] 2. `TVWebViewClient.kt`에 라우터 가드 및 커맨드 디스패처 패치 적용 <!-- id: 1 -->
-    - [x] `_.n.Fg`의 `ACCOUNT_EVENT_TRIGGER_CAST_PROTECTION` 조건 무력화
-    - [x] `_.kk`에서 `window._k2CommandDispatcher` 노출
-    - [x] `resolveCommand`에서 뒤로가기 시 계정 선택 명령을 홈(`default`) 명령으로 자동 전환
-- [x] 3. `h5vcc_polyfill.js` 및 `TVRemoteKeyHandler.kt` 수술적 개편 <!-- id: 2 -->
-    - [x] `h5vcc_polyfill.js`에 `_k2InBackNavigation` 및 `_k2HasLoadedHome` 플래그 관리 추가
-    - [x] `TVRemoteKeyHandler.kt`에서 키 난사 제거 및 단일 이벤트 / 커맨드 디스패치 방식으로 전환
-    - [x] 홈 화면에서 WebView로 Escape 전달 차단 (계정 선택 팝업 방지)
-    - [x] `ACTION_UP` 소비 및 `MainActivity.kt`의 `onBackPressed` 연동
-- [x] 4. 빌드 검증 및 깃허브 배포 <!-- id: 3 -->
-    - [x] `.\gradlew.bat assembleDebug` 빌드 검증
-    - [x] 루트 `YT_TV_AC.apk` 갱신 및 Git 커밋/푸시
-    - [x] 결과 보고서(`.agents/walkthrough_back_navigation_account_fix_20261016.md`) 작성
+- [x] 1. 요구사항 분석 및 구현 계획 수립 <!-- id: 0 -->
+    - [x] 초반 로딩 지연 원인(캐시 부재, 매회 정규식 재처리, 시작 시 API 호출) 분석
+    - [x] 2160p 동영상 뒤로가기 무반응 원인(가짜 JS 이벤트 무시 및 네이티브 키 누락) 규명
+    - [x] 설정 메뉴 맨 하단 '앱 버전' 위 업데이트 확인 버튼 배치 및 자동 업데이트 제거 계획 수립
+    - [x] 구현 계획서(`.agents/implementation_plan_startup_speed_and_back_2160p_20261016.md`) 작성
+- [x] 2. 초반 로딩 속도 대폭 최적화 <!-- id: 1 -->
+    - [x] `TVWebViewClient.kt`에 OkHttp 50MB HTTP 캐시 및 패치 바이너리 디스크 캐시(`patched_web_cache`) 구축
+    - [x] `MainActivity.kt`에서 시작 시 `checkForUpdates(false)` 제거 및 시작 URL `https://www.youtube.com/tv`로 단순화
+    - [x] 폴리필 주입 중복 제거
+- [x] 3. 2160p 동영상 뒤로가기 정상화 <!-- id: 2 -->
+    - [x] `TVRemoteKeyHandler.kt`에서 동영상 및 오버레이 닫기 시 신뢰할 수 있는 단일 네이티브 `KEYCODE_ESCAPE` (ACTION_DOWN + ACTION_UP) 디스패치 복원
+    - [x] `movie_player.focus()` 및 오디오 누수 방지 뮤트/정지 유지
+    - [x] 계정 선택기 방어 플래그(`window._k2InBackNavigation`) 및 홈 화면 더블 클릭 종료 로직 유지
+- [x] 4. 설정 화면 내 '앱 버전' 바로 위 업데이트 확인 버튼 삽입 <!-- id: 3 -->
+    - [x] `h5vcc_polyfill.js`의 `k2InjectSettingsUpdateCard` 수정 (버전 항목 바로 위 삽입 및 리모컨 UI 스타일링)
+    - [x] `MainActivity.kt`의 `checkAppUpdate()`에서 `checkForUpdates(isManualCheck = true)` 즉각 연동
+- [x] 5. 빌드 검증 및 깃허브 배포 <!-- id: 4 -->
+    - [x] `.\gradlew.bat assembleDebug` 빌드 검증 (성공)
+    - [x] 최신 `YT_TV_AC.apk` 프로젝트 루트 복사 및 Git 커밋/푸시
+    - [x] 결과 리포트(`.agents/walkthrough_startup_speed_and_back_2160p_20261016.md`) 작성

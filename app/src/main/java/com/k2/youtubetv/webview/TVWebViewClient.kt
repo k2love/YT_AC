@@ -8,11 +8,13 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import okhttp3.Cache
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 class TVWebViewClient(private val context: Context) : WebViewClient() {
@@ -52,13 +54,51 @@ class TVWebViewClient(private val context: Context) : WebViewClient() {
     }
 
     private var polyfillScript: String = ""
+    private val patchedCacheDir = File(context.cacheDir, "patched_web_cache").apply { mkdirs() }
 
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
+        .cache(Cache(File(context.cacheDir, "tv_okhttp_cache"), 50L * 1024 * 1024))
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
+
+    private fun getCachedPatchedResponse(url: String, mimeType: String): WebResourceResponse? {
+        val cleanUrl = url.substringBefore("#")
+        val cacheKey = cleanUrl.hashCode().toString() + "_" + mimeType.replace("/", "_") + ".bin"
+        val file = File(patchedCacheDir, cacheKey)
+        if (file.exists() && file.length() > 0) {
+            val age = System.currentTimeMillis() - file.lastModified()
+            if (age < 24 * 3600 * 1000L) { // 24 hours
+                return try {
+                    val bytes = file.readBytes()
+                    WebResourceResponse(
+                        mimeType,
+                        "utf-8",
+                        200,
+                        "OK",
+                        emptyMap(),
+                        ByteArrayInputStream(bytes)
+                    )
+                } catch (e: Exception) {
+                    null
+                }
+            }
+        }
+        return null
+    }
+
+    private fun savePatchedResponseToCache(url: String, mimeType: String, bytes: ByteArray) {
+        try {
+            val cleanUrl = url.substringBefore("#")
+            val cacheKey = cleanUrl.hashCode().toString() + "_" + mimeType.replace("/", "_") + ".bin"
+            val file = File(patchedCacheDir, cacheKey)
+            file.writeBytes(bytes)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to write patched response to cache: ${e.message}")
+        }
+    }
 
     init {
         try {
@@ -168,6 +208,12 @@ class TVWebViewClient(private val context: Context) : WebViewClient() {
     }
 
     private fun fetchAndPatchJs(url: String, request: WebResourceRequest?, fullSurgical: Boolean): WebResourceResponse? {
+        val cached = getCachedPatchedResponse(url, "application/javascript")
+        if (cached != null) {
+            Log.d(TAG, "[Fast-Cache] Returning cached patched JS: $url")
+            return cached
+        }
+
         return try {
             val requestBuilder = Request.Builder().url(url)
             request?.requestHeaders?.forEach { (k, v) ->
@@ -272,6 +318,7 @@ class TVWebViewClient(private val context: Context) : WebViewClient() {
             }
 
             val bytes = js.toByteArray(Charsets.UTF_8)
+            savePatchedResponseToCache(url, "application/javascript", bytes)
             WebResourceResponse(
                 "application/javascript",
                 "utf-8",
@@ -294,6 +341,12 @@ class TVWebViewClient(private val context: Context) : WebViewClient() {
     }
 
     private fun fetchAndNeutralizeCss(url: String, request: WebResourceRequest?): WebResourceResponse? {
+        val cached = getCachedPatchedResponse(url, "text/css")
+        if (cached != null) {
+            Log.d(TAG, "[Fast-Cache] Returning cached neutralized CSS: $url")
+            return cached
+        }
+
         return try {
             val requestBuilder = Request.Builder().url(url)
             request?.requestHeaders?.forEach { (k, v) ->
@@ -332,6 +385,7 @@ class TVWebViewClient(private val context: Context) : WebViewClient() {
             css += appendRules
 
             val bytes = css.toByteArray(Charsets.UTF_8)
+            savePatchedResponseToCache(url, "text/css", bytes)
             WebResourceResponse(
                 "text/css",
                 "utf-8",
@@ -512,7 +566,6 @@ class TVWebViewClient(private val context: Context) : WebViewClient() {
     override fun onPageFinished(view: WebView?, url: String?) {
         super.onPageFinished(view, url)
         Log.d(TAG, "Page finished: $url")
-        injectPolyfill(view)
     }
 
     override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {

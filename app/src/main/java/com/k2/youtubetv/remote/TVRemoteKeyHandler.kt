@@ -181,11 +181,7 @@ class TVRemoteKeyHandler(
                     if (closer) {
                         try { closer.click(); return 'HANDLED_MENU:closer_clicked'; } catch (e2) {}
                     }
-                    // Fire EXACTLY ONE Escape key pair to close overlay
-                    var target = document.activeElement || found;
-                    fireKey(target, 'keydown', 'Escape', 'Escape', 27);
-                    fireKey(target, 'keyup', 'Escape', 'Escape', 27);
-                    return 'HANDLED_MENU:single_escape';
+                    return 'NEEDS_ESCAPE:menu';
                 }
 
                 // 2. Check if a video is active or in Watch screen
@@ -197,14 +193,18 @@ class TVRemoteKeyHandler(
                     }
                 }
                 var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
-                if (player && typeof player.getPlayerState === 'function') {
-                    var s = player.getPlayerState();
-                    if (s === 1 || s === 2 || s === 3) { // 1: playing, 2: paused, 3: buffering
-                        isVideoActive = true;
+                if (player) {
+                    if (typeof player.getPlayerState === 'function') {
+                        var s = player.getPlayerState();
+                        if (s === 1 || s === 2 || s === 3) isVideoActive = true;
                     }
+                    if (player.classList && player.classList.contains('playing-mode')) isVideoActive = true;
                 }
                 var curHref = window.location.href;
                 if (curHref.indexOf('/watch') !== -1 || (window.location.hash && window.location.hash.indexOf('watch') !== -1)) {
+                    isVideoActive = true;
+                }
+                if (document.querySelector('ytlr-watch-metadata-renderer, .ytp-chrome-bottom, ytlr-player-controls')) {
                     isVideoActive = true;
                 }
 
@@ -219,25 +219,14 @@ class TVRemoteKeyHandler(
                     if (player) {
                         try { player.stopVideo(); } catch (e6) {}
                         try { player.pauseVideo(); } catch (e7) {}
+                        try { player.focus(); } catch (e8) {}
                     }
 
                     // Arm back-navigation flag to block any account selector redirect
                     window._k2InBackNavigation = true;
                     setTimeout(function() { window._k2InBackNavigation = false; }, 1500);
 
-                    // Clean navigate directly to Home if command dispatcher is available
-                    if (window._k2CommandDispatcher && typeof window._k2CommandDispatcher.resolveCommand === 'function') {
-                        try {
-                            window._k2CommandDispatcher.resolveCommand({browseEndpoint: {browseId: "default"}});
-                            return 'HANDLED_VIDEO:dispatched_home';
-                        } catch (e8) {}
-                    }
-
-                    // Fallback: Fire EXACTLY ONE pure Escape key pair (never fire multiple keys!)
-                    var escTarget = document.activeElement || document.body;
-                    fireKey(escTarget, 'keydown', 'Escape', 'Escape', 27);
-                    fireKey(escTarget, 'keyup', 'Escape', 'Escape', 27);
-                    return 'HANDLED_VIDEO:single_escape';
+                    return 'NEEDS_ESCAPE:video';
                 }
 
                 // 3. At browse / home screen: NEVER fire Escape or Back into WebView!
@@ -249,8 +238,12 @@ class TVRemoteKeyHandler(
         webView.evaluateJavascript(script) { result ->
             val cleanedResult = result?.replace("\"", "") ?: ""
             Log.d(TAG, "Back navigation result: $cleanedResult")
-            if (cleanedResult.startsWith("HANDLED_MENU") || cleanedResult.startsWith("HANDLED_VIDEO")) {
-                // Successfully closed menu or returned to home from video; reset timer
+            if (cleanedResult.startsWith("NEEDS_ESCAPE") || cleanedResult.startsWith("HANDLED_MENU")) {
+                if (cleanedResult.startsWith("NEEDS_ESCAPE")) {
+                    // Dispatch real trusted Escape key to WebView so Blink processes it natively
+                    webView.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ESCAPE))
+                    webView.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ESCAPE))
+                }
                 lastBackPressTime = 0L
             } else {
                 // At the root home screen: double back to exit app.
