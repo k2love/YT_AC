@@ -21,6 +21,11 @@ class TVRemoteKeyHandler(
     private var lastBackPressTime: Long = 0L
 
     fun handleKeyEvent(keyCode: Int, event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE)) {
+            // Consume ACTION_UP as well to prevent default Activity/WebView back propagation
+            return true
+        }
+
         if (event.action != KeyEvent.ACTION_DOWN) {
             return false
         }
@@ -169,25 +174,19 @@ class TVRemoteKeyHandler(
 
                 if (found) {
                     // Close the overlay menu without touching video playback
-                    var n = (window._k2MenuBackCount || 0) + 1;
-                    window._k2MenuBackCount = n;
-                    var target = document.activeElement || found;
                     var closer = null;
                     try {
                         closer = found.querySelector ? found.querySelector('[aria-label*="닫기"], [aria-label*="Close"], [aria-label*="close"], [aria-label*="뒤로"], [aria-label*="Back"], [aria-label*="back"], [class*="close"], [class*="Close"], [class*="back-button"], [class*="BackButton"]') : null;
                     } catch (e) {}
-                    if (closer) { try { closer.click(); } catch (e2) {} }
+                    if (closer) {
+                        try { closer.click(); return 'HANDLED_MENU:closer_clicked'; } catch (e2) {}
+                    }
+                    // Fire EXACTLY ONE Escape key pair to close overlay
+                    var target = document.activeElement || found;
                     fireKey(target, 'keydown', 'Escape', 'Escape', 27);
                     fireKey(target, 'keyup', 'Escape', 'Escape', 27);
-                    try { document.documentElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true, composed: true })); } catch (e3) {}
-                    fireKey(target, 'keydown', 'Backspace', 'Backspace', 8);
-                    fireKey(target, 'keyup', 'Backspace', 'Backspace', 8);
-                    fireKey(target, 'keydown', 'BrowserBack', 'BrowserBack', 8);
-                    fireKey(target, 'keydown', 'GoBack', 'GoBack', 461);
-                    fireKey(target, 'keydown', 'Return', 'Return', 10009);
-                    return 'HANDLED_MENU:' + foundVia + '#' + n;
+                    return 'HANDLED_MENU:single_escape';
                 }
-                window._k2MenuBackCount = 0;
 
                 // 2. Check if a video is active or in Watch screen
                 var isVideoActive = false;
@@ -222,23 +221,27 @@ class TVRemoteKeyHandler(
                         try { player.pauseVideo(); } catch (e7) {}
                     }
 
-                    // Exit Watch screen by firing pure Escape / GoBack keys to Kabuki router
+                    // Arm back-navigation flag to block any account selector redirect
+                    window._k2InBackNavigation = true;
+                    setTimeout(function() { window._k2InBackNavigation = false; }, 1500);
+
+                    // Clean navigate directly to Home if command dispatcher is available
+                    if (window._k2CommandDispatcher && typeof window._k2CommandDispatcher.resolveCommand === 'function') {
+                        try {
+                            window._k2CommandDispatcher.resolveCommand({browseEndpoint: {browseId: "default"}});
+                            return 'HANDLED_VIDEO:dispatched_home';
+                        } catch (e8) {}
+                    }
+
+                    // Fallback: Fire EXACTLY ONE pure Escape key pair (never fire multiple keys!)
                     var escTarget = document.activeElement || document.body;
                     fireKey(escTarget, 'keydown', 'Escape', 'Escape', 27);
                     fireKey(escTarget, 'keyup', 'Escape', 'Escape', 27);
-                    try { document.documentElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true, composed: true })); } catch (e8) {}
-                    fireKey(escTarget, 'keydown', 'GoBack', 'GoBack', 461);
-                    fireKey(escTarget, 'keydown', 'Backspace', 'Backspace', 8);
-
-                    // NEVER call window.history.back() or location.replace() here,
-                    // as it overshoots back to the startup account picker screen!
-                    return 'NEEDS_ESCAPE:video_stopped';
+                    return 'HANDLED_VIDEO:single_escape';
                 }
 
-                // 3. At browse / home screen: do not use history.back() (which reverts to account selector)
-                var homeTarget = document.activeElement || document.body;
-                fireKey(homeTarget, 'keydown', 'Escape', 'Escape', 27);
-                fireKey(homeTarget, 'keyup', 'Escape', 'Escape', 27);
+                // 3. At browse / home screen: NEVER fire Escape or Back into WebView!
+                // Firing Escape at root home causes Kabuki to pop the stack and crash into the Account Selector!
                 return 'ROOT_HOME';
             })();
         """.trimIndent()
@@ -246,17 +249,12 @@ class TVRemoteKeyHandler(
         webView.evaluateJavascript(script) { result ->
             val cleanedResult = result?.replace("\"", "") ?: ""
             Log.d(TAG, "Back navigation result: $cleanedResult")
-            if (cleanedResult.startsWith("NEEDS_ESCAPE") || cleanedResult.startsWith("HANDLED_MENU")) {
-                // Dispatch real trusted Escape key to WebView to ensure Chromium Blink engine processes it
-                webView.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ESCAPE))
-                webView.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ESCAPE))
-                lastBackPressTime = 0L
-            } else if (cleanedResult.startsWith("NEEDS_CENTER")) {
-                webView.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER))
-                webView.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER))
+            if (cleanedResult.startsWith("HANDLED_MENU") || cleanedResult.startsWith("HANDLED_VIDEO")) {
+                // Successfully closed menu or returned to home from video; reset timer
                 lastBackPressTime = 0L
             } else {
-                // At the root home screen, double back to exit app
+                // At the root home screen: double back to exit app.
+                // NO keys are forwarded to WebView so it stays stably on Home!
                 val now = SystemClock.elapsedRealtime()
                 if (now - lastBackPressTime < BACK_PRESS_INTERVAL) {
                     activity.finish()
@@ -266,6 +264,11 @@ class TVRemoteKeyHandler(
                 }
             }
         }
+    }
+
+    fun handleBackFromActivity() {
+        val webView = webViewProvider() ?: return
+        handleBackAction(webView)
     }
 
     private fun dispatchJsKeyEvent(webView: WebView, key: String, keyCode: Int) {

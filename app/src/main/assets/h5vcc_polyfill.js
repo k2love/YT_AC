@@ -655,11 +655,26 @@
     }
 
     // =========================================================================
-    // 5d. Browse-URL memory: Neutralized to prevent overshooting to account picker.
-    // YouTube TV manages its view stack internally (Kabuki router); forcing
-    // location.replace() reloads the app back into ?launch=menu (account picker).
+    // 5d. Back-Navigation & Home Protection
+    // Prevents overshooting/redirecting back to the startup account picker screen.
     // =========================================================================
     window._k2LastBrowse = null;
+    window._k2InBackNavigation = false;
+    window._k2HasLoadedHome = false;
+
+    // Track when user reaches main browsing / watching view
+    setInterval(function() {
+        try {
+            var href = window.location.href || '';
+            var hash = window.location.hash || '';
+            if (hash.indexOf('browse') !== -1 ||
+                href.indexOf('/browse') !== -1 ||
+                href.indexOf('/watch') !== -1 ||
+                !!document.querySelector('ytlr-browse-feed-renderer, ytlr-channel-view-model, .html5-video-player')) {
+                window._k2HasLoadedHome = true;
+            }
+        } catch (e) {}
+    }, 1000);
 
     // =========================================================================
     // 5e. Quality-submenu spy (READ-ONLY) + DOM-level UHD row injection.

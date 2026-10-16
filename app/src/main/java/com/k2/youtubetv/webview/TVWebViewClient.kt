@@ -198,6 +198,36 @@ class TVWebViewClient(private val context: Context) : WebViewClient() {
             js = js.replace("\"ad-showing\"", "\"no-ad-showing\"")
             js = js.replace("\"ad-interrupting\"", "\"no-ad-interrupting\"")
 
+            // 4. Kabuki router patches to prevent overshooting / redirecting to Account Selector:
+            // 4a. Block Cast Protection account selector in router.Fg()
+            val fgCastProtectionRegex = Regex("""if\s*\(_\.txa\(this\.history\.Ca\(\)\)\s*&&\s*_\.As\(_\.H\.get\(_\.Bs\)\)\)""")
+            if (fgCastProtectionRegex.containsMatchIn(js)) {
+                js = js.replace(fgCastProtectionRegex, "if(!1)")
+                Log.d(TAG, "[Router-Fix] Neutralized Cast Protection account selector in router Fg()")
+            }
+
+            // 4b. Expose command dispatcher to window for clean home navigation
+            val kkRegex = Regex("""_\.kk=function\(\)\{return _\.Zx\.instance\};""")
+            if (kkRegex.containsMatchIn(js)) {
+                js = js.replace(kkRegex, "_.kk=function(){window._k2CommandDispatcher=_.Zx.instance;return _.Zx.instance};")
+                Log.d(TAG, "[Router-Fix] Bound window._k2CommandDispatcher via _.kk")
+            }
+
+            // 4c. Intercept resolveCommand to prevent ANY unintended account selector command on back navigation
+            val resolveCmdRegex = Regex("""\.prototype\.resolveCommand=function\(([a-zA-Z0-9_$]+),([a-zA-Z0-9_$]+)\)\{return _\.ay\(this,\1,\2\)\.handled\};""")
+            if (resolveCmdRegex.containsMatchIn(js)) {
+                js = js.replace(resolveCmdRegex, """.prototype.resolveCommand=function($1,$2){
+                    if($1&&($1.requestAccountSelectorCommand||$1.restartToAccountSelectorCommand||$1.startAccountSelectorCommand)){
+                        var tr=($1.requestAccountSelectorCommand&&$1.requestAccountSelectorCommand.identityActionContext&&$1.requestAccountSelectorCommand.identityActionContext.eventTrigger)||"";
+                        if(tr==="ACCOUNT_EVENT_TRIGGER_CAST_PROTECTION"||window._k2InBackNavigation||window._k2HasLoadedHome){
+                            return this.resolveCommand({browseEndpoint:{browseId:"default"}},$2);
+                        }
+                    }
+                    return _.ay(this,$1,$2).handled;
+                };""".trimIndent())
+                Log.d(TAG, "[Router-Fix] Installed resolveCommand account selector guard")
+            }
+
             if (fullSurgical) {
                 // Player bundle only from here down: (0,720)/(0,1080) tuples or
                 // getAdBreakUrl identifiers in unrelated bundles may mean seconds,

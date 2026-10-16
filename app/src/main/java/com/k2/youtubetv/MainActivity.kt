@@ -103,6 +103,15 @@ class MainActivity : AppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (webChromeClient.isCustomViewShowing()) {
+            webChromeClient.onHideCustomView()
+            return
+        }
+        remoteKeyHandler.handleBackFromActivity()
+    }
+
     private fun hideSystemUI() {
         window.decorView.systemUiVisibility = (
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
