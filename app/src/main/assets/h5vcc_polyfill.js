@@ -864,171 +864,84 @@
 
     // =========================================================================
     // 7. YouTube TV Settings Screen Update Widget Injector
-    // Injects an "App Info & Update" card right above the app version in settings
+    // Injects an "App Info & Update" item right above the app version in settings
     // =========================================================================
-    function k2FindVersionElement() {
-        try {
-            if (!document.body) return null;
-            var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-            var node;
-            var candidates = [];
-
-            while (node = walker.nextNode()) {
-                var txt = (node.nodeValue || '').trim();
-                if (!txt) continue;
-
-                // Ignore text inside our own update card
-                if (node.parentElement && node.parentElement.closest('#yt-ac-settings-update-banner')) {
-                    continue;
-                }
-
-                // Match version indicators: "앱 버전", "App version", "버전: ", "Version: ", "버전"
-                var isExactVersion = /^(앱\s*버전|app\s*version)/i.test(txt);
-                var isVersionPrefix = /^(버전|version)\s*[:：0-9vV]/i.test(txt);
-                var isVersionWord = (txt.length <= 20 && /(앱\s*버전|app\s*version|버전|version|build)/i.test(txt));
-
-                if (isExactVersion || isVersionPrefix || isVersionWord) {
-                    var el = node.parentElement;
-                    if (el && el.offsetParent !== null) { // visible in rendered layout
-                        candidates.push({ el: el, exact: isExactVersion });
-                        if (isExactVersion) break; // highest priority match
-                    }
-                }
-            }
-
-            if (candidates.length === 0) return null;
-
-            // Pick the best candidate (exact matches first, otherwise the last visible occurrence)
-            var target = candidates[0].exact ? candidates[0].el : candidates[candidates.length - 1].el;
-
-            // Ascend upward to find the full row / item container
-            var curr = target;
-            var row = curr;
-            while (curr && curr.parentElement && curr.parentElement !== document.body) {
-                var p = curr.parentElement;
-                var tag = (curr.tagName || '').toLowerCase();
-                var role = curr.getAttribute('role') || '';
-
-                if (tag.indexOf('ytlr-') === 0 ||
-                    role === 'menuitem' || role === 'listitem' || role === 'option' || role === 'button' ||
-                    curr.classList.contains('ytlr-compact-settings-item') ||
-                    curr.classList.contains('ytlr-item-section-renderer') ||
-                    curr.classList.contains('settings-item') ||
-                    (p.children.length > 1 && curr.offsetHeight >= 24 && curr.offsetWidth >= 100)) {
-                    row = curr;
-                    break;
-                }
-                curr = p;
-            }
-            return row;
-        } catch (e) {
-            return null;
-        }
-    }
-
     function k2InjectSettingsUpdateCard() {
         try {
-            var versionRow = k2FindVersionElement();
-            var existingCard = document.getElementById('yt-ac-settings-update-banner');
+            var existingTab = document.getElementById('yt-ac-settings-update-banner');
 
-            if (versionRow && versionRow.parentNode) {
-                // If card exists, make sure it is right before the versionRow
-                if (existingCard) {
-                    if (existingCard.nextElementSibling !== versionRow && existingCard !== versionRow) {
-                        versionRow.parentNode.insertBefore(existingCard, versionRow);
-                        console.log('[ZeroAd] Repositioned update card right above versionRow.');
-                    }
-                    return;
+            // Find all ytlr-tab-renderer elements in settings list
+            var allTabs = Array.from(document.querySelectorAll('ytlr-tab-renderer'));
+            if (allTabs.length === 0) return;
+
+            var versionTab = allTabs.find(function(t) {
+                if (t.id === 'yt-ac-settings-update-banner') return false;
+                var txt = (t.innerText || '').trim();
+                return txt.includes('앱 버전') || txt.includes('App version') || txt.includes('버전');
+            });
+
+            if (!versionTab || !versionTab.parentElement) return;
+
+            // If already injected and correctly placed right before versionTab, done!
+            if (existingTab) {
+                if (existingTab.nextElementSibling !== versionTab && existingTab !== versionTab) {
+                    versionTab.parentElement.insertBefore(existingTab, versionTab);
                 }
-
-                // Create fresh card
-                var card = document.createElement('div');
-                card.id = 'yt-ac-settings-update-banner';
-                card.setAttribute('tabindex', '0');
-                card.setAttribute('role', 'button');
-                card.setAttribute('aria-label', '최신 앱 업데이트 확인');
-                card.style.cssText = 'display: block; margin: 10px 16px; padding: 14px 20px; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.25); border-radius: 12px; cursor: pointer; outline: none; box-sizing: border-box; transition: all 0.18s ease;';
-
-                card.innerHTML = '<div class="yt-ac-title" style="font-size: 18px; font-weight: bold; color: #FFFFFF; display: flex; align-items: center; gap: 8px;">🔄 최신 앱 업데이트 확인</div>' +
-                                 '<div class="yt-ac-subtitle" style="font-size: 13px; color: #AAAAAA; margin-top: 4px;">리모컨 선택(OK) 시 최신 APK 업데이트 확인 및 즉시 설치</div>';
-
-                card.addEventListener('focus', function() {
-                    card.style.background = '#FFFFFF';
-                    card.style.borderColor = '#FFFFFF';
-                    card.style.boxShadow = '0 0 16px rgba(255,255,255,0.85)';
-                    card.style.transform = 'scale(1.02)';
-                    var t = card.querySelector('.yt-ac-title');
-                    var st = card.querySelector('.yt-ac-subtitle');
-                    if (t) t.style.color = '#0F0F0F';
-                    if (st) st.style.color = '#555555';
-                });
-
-                card.addEventListener('blur', function() {
-                    card.style.background = 'rgba(255,255,255,0.08)';
-                    card.style.borderColor = 'rgba(255,255,255,0.25)';
-                    card.style.boxShadow = 'none';
-                    card.style.transform = 'scale(1)';
-                    var t = card.querySelector('.yt-ac-title');
-                    var st = card.querySelector('.yt-ac-subtitle');
-                    if (t) t.style.color = '#FFFFFF';
-                    if (st) st.style.color = '#AAAAAA';
-                });
-
-                function triggerCheck() {
-                    console.log('[ZeroAd] Settings update button activated.');
-                    if (window.YT_TV_APP && typeof window.YT_TV_APP.checkAppUpdate === 'function') {
-                        window.YT_TV_APP.checkAppUpdate();
-                    }
-                }
-
-                card.addEventListener('click', triggerCheck);
-                card.addEventListener('keydown', function(e) {
-                    if (e.key === 'Enter' || e.keyCode === 13) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        triggerCheck();
-                    }
-                });
-
-                versionRow.parentNode.insertBefore(card, versionRow);
-                console.log('[ZeroAd] Successfully injected update card right above versionRow!');
                 return;
             }
 
-            // Fallback: If versionRow not found, but we are inside settings pane
-            if (!existingCard) {
-                var fallbackContainer = document.querySelector('ytlr-about-renderer, ytlr-settings-category-renderer, [role="menu"][aria-label*="설정"], [role="menu"][aria-label*="Settings"]');
-                if (fallbackContainer) {
-                    var fbCard = document.createElement('div');
-                    fbCard.id = 'yt-ac-settings-update-banner';
-                    fbCard.setAttribute('tabindex', '0');
-                    fbCard.setAttribute('role', 'button');
-                    fbCard.setAttribute('aria-label', '최신 앱 업데이트 확인');
-                    fbCard.style.cssText = 'display: block; margin: 10px 16px; padding: 14px 20px; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.25); border-radius: 12px; cursor: pointer; outline: none; box-sizing: border-box;';
-                    fbCard.innerHTML = '<div class="yt-ac-title" style="font-size: 18px; font-weight: bold; color: #FFFFFF;">🔄 최신 앱 업데이트 확인</div>' +
-                                       '<div class="yt-ac-subtitle" style="font-size: 13px; color: #AAAAAA; margin-top: 4px;">리모컨 선택 시 최신 APK 즉시 확인</div>';
-                    fbCard.addEventListener('click', function() {
-                        if (window.YT_TV_APP && typeof window.YT_TV_APP.checkAppUpdate === 'function') {
-                            window.YT_TV_APP.checkAppUpdate();
-                        }
-                    });
-                    fbCard.addEventListener('keydown', function(e) {
-                        if (e.key === 'Enter' || e.keyCode === 13) {
-                            if (window.YT_TV_APP && typeof window.YT_TV_APP.checkAppUpdate === 'function') {
-                                window.YT_TV_APP.checkAppUpdate();
-                            }
-                        }
-                    });
-                    fallbackContainer.appendChild(fbCard);
-                    console.log('[ZeroAd] Injected update card into fallback settings container.');
+            // Clone versionTab to inherit 100% of YouTube TV's native layout, fonts, and spatial navigation
+            var myTab = versionTab.cloneNode(true);
+            myTab.id = 'yt-ac-settings-update-banner';
+            myTab.removeAttribute('idomkey');
+
+            // Update text to pure plain text matching native menu exactly (no emoji!)
+            var textEl = myTab.querySelector('yt-formatted-string') || myTab.querySelector('span') || myTab;
+            textEl.textContent = '최신 앱 업데이트 확인';
+
+            function triggerCheck(e) {
+                if (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
                 }
+                console.log('[ZeroAd] Settings update button activated.');
+                if (window.YT_TV_APP && typeof window.YT_TV_APP.checkAppUpdate === 'function') {
+                    window.YT_TV_APP.checkAppUpdate();
+                }
+            }
+
+            myTab.addEventListener('click', triggerCheck);
+            myTab.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.keyCode === 13) {
+                    triggerCheck(e);
+                }
+            });
+
+            // Clean up versionTab in case it had corrupted inner children from previous attempts
+            var verText = versionTab.querySelector('yt-formatted-string');
+            if (verText && verText.textContent !== '앱 버전') {
+                verText.textContent = '앱 버전';
+            }
+
+            // Insert right above the versionTab
+            versionTab.parentElement.insertBefore(myTab, versionTab);
+            console.log('[ZeroAd] Successfully injected native-styled update tab right above versionTab!');
+
+            // Observe parent mutations so it never disappears on scroll / idom re-render
+            var listParent = versionTab.parentElement;
+            if (!listParent._k2ObserverAttached && window.MutationObserver) {
+                listParent._k2ObserverAttached = true;
+                var observer = new MutationObserver(function() {
+                    k2InjectSettingsUpdateCard();
+                });
+                observer.observe(listParent, { childList: true });
             }
         } catch (e) {
             console.warn('[ZeroAd] Error injecting settings update card:', e);
         }
     }
 
-    setInterval(k2InjectSettingsUpdateCard, 800);
+    setInterval(k2InjectSettingsUpdateCard, 500);
 
     console.log("[ZeroAd] Ultra-Clean Zero-Ad Engine v8 fully engaged.");
 })();
