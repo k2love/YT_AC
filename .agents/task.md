@@ -1,30 +1,22 @@
-# 작업 보드: 설정 > 고객센터 깃허브 URL 및 QR코드 변경
+# 작업 보드: 라이브 방송 480p 고정 해결 및 4K/8K/HFR 화질 제한 완전 해제
 
 ## 1. 개요 및 사용자 요구사항
-- **요구사항**: 설정 -> 정보 -> '고객센터' 화면의 웹 주소와 QR 코드를 우리 깃허브(`https://github.com/k2love/YT_AC`)로 등록.
-- **제외 사항**: '의견 보내기'는 이번 작업에서 건드리지 않고 다음 작업으로 이관.
-- **성공 기준**:
-  - '고객센터' 선택 시 우측에 표시되는 URL 텍스트가 `youtube.com/tv_help`에서 `github.com/k2love/YT_AC`로 변경됨.
-  - 우측에 표시되는 QR 코드가 `https://github.com/k2love/YT_AC`로 연결되는 정상 QR 코드로 대체 렌더링됨.
-  - '의견 보내기' 등 다른 설정 화면 및 기능에는 일체 영향이 없음.
-  - 실제 Android TV 기기(`192.168.100.121`)에서 캡처 검증 완료.
+- **현상**:
+  1. 라이브 방송(Live Stream)을 재생할 때 실제 1080p 이상 송출되는 방송임에도 불구하고 420p/480p로 화질이 고정되는 문제.
+  2. 4K, 8K 관광/고화질 영상 재생 시 720p 등으로 화질이 고정/제한(cap)되는 문제.
+- **목표**:
+  1. 오리지널 유튜브 TV 앱의 번들 역공학(`tv-player-ias.js`)을 통한 HFR(60fps) 및 화질 제한 근본 원인(`capHfr`, `MediaSource.isTypeSupported` Sanity Probe) 규명.
+  2. Chromium MSE Sanity Probe 방어 패치 적용하여 `capHfr` 및 HDR 드롭 원천 차단.
+  3. 라이브 및 일반 VOD 재생 시 사용 가능한 최고 화질(1080p60 / 4K60 / 8K 등)로 즉시 자동 상향(Auto-boost)하는 업데이터 로직 적용.
+  4. 실제 Android TV 기기(`192.168.100.121:5555`)에서 실시간 라이브 방송(`OsqH1F_BL1I`) 및 4K 60fps HDR 영상(`LXb3EKWsInQ`)을 직접 재생하여 각각 1080p@60, 2160p@60으로 구동되는지 Stats for Nerds 검증 완료.
 
 ## 2. 작업 단계
-- [/] 1. '고객센터' 우측 뷰의 DOM 및 렌더러 구조 정밀 분석
-- [/] 2. `implementation_plan_settings_help_center_github_20261016.md` 계획서 작성
-- [/] 3. 깃허브 URL용 QR 코드 생성 (SVG 또는 Data URI / Canvas / img)
-- [/] 4. `app/src/main/assets/h5vcc_polyfill.js`에 수술적 정밀 최소 수정 적용:
-  - '고객센터' 패널 감지 시 텍스트 및 QR 코드를 깃허브 저장소 정보로 교체
-- [/] 5. Gradle 빌드 성공 확인 (`.\gradlew.bat assembleDebug`)
-- [/] 6. TV 기기(`192.168.100.121:5555`)에 APK 배포 및 설치
-- [/] 7. 실제 TV 기기 화면 캡처 검증:
-  - 설정 -> 정보 -> 고객센터 선택 시 깃허브 주소 및 QR 코드 정상 표시 확인
-  - 의견 보내기 및 타 메뉴 정상 동작 확인
-- [/] 8. `walkthrough_settings_help_center_github_20261016.md` 결과 리포트 작성
-- [/] 9. Git 커밋 및 `origin/main` 푸시 (`1f354b9`)
-
-## 3. 후속 작업 (2026-10-16): 원본 플래시 제거 + 의견 보내기 pulls 교체
-- [/] 1. 데이터 레이어 선교체로 원본 QR/URL 플래시 제거 (JSON 훅 + MutationObserver + 1초 백스톱)
-- [/] 2. 의견 보내기 → `github.com/k2love/YT_AC/pulls` + pulls QR 교체 (`.agents/github_qr_pulls_*`)
-- [/] 3. node 하네스 23/23 검증 + `assembleDebug` 빌드 (adb 미사용)
-- [ ] 4. 실기기 검증은 사용자 측에서 진행 (설치 후 고객센터/의견 보내기 화면 확인)
+- [x] 1. 기존 비디오 플레이어 및 화질 관련 코드 정밀 분석 (`h5vcc_polyfill.js`, `MainActivity.kt` 등)
+- [x] 2. 오리지널 유튜브 TV 앱 / Cobalt 플레이어의 라이브 스트리밍 화질 결정 및 ABR 제어 로직 분석 (`tv-player-ias.js`)
+- [x] 3. `implementation_plan_unlock_all_qualities_and_live_hfr_20261017.md` 계획서 작성
+- [x] 4. Sanity Probe 방어 및 최고 화질 자동 선택 / ABR 부스트 로직 구현 (`h5vcc_polyfill.js`)
+- [x] 5. Gradle 빌드 성공 확인 (`.\gradlew.bat assembleDebug`)
+- [x] 6. TV 기기(`192.168.100.121:5555`)에 APK 배포 및 설치
+- [x] 7. 실제 라이브 방송 및 4K 영상 재생 후 통계(Stats for nerds) 캡처 검증 (1080p@60, 2160p@60)
+- [x] 8. `walkthrough_live_max_quality_auto_updater_20261017.md` 결과 리포트 작성
+- [ ] 9. Git 커밋 및 `origin/main` 푸시

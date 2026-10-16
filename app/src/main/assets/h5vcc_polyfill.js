@@ -17,27 +17,44 @@
         Object.defineProperty(window.screen, 'availHeight', { get: function() { return 2160; }, configurable: true });
         Object.defineProperty(window, 'devicePixelRatio', { get: function() { return 2.0; }, configurable: true });
 
-        // Safely unlock VP9 & AV1 4K formats in MediaSource without breaking EME/DRM
+        // Safely unlock VP9, AV1, 4K/8K & HFR (60fps) formats in MediaSource without breaking EME/DRM
         if (window.MediaSource && typeof window.MediaSource.isTypeSupported === 'function') {
             var origIsTypeSupported = window.MediaSource.isTypeSupported.bind(window.MediaSource);
             window.MediaSource.isTypeSupported = function(mimeType) {
                 if (!mimeType) return false;
                 var lower = mimeType.toLowerCase();
-                // Physical sanity probes (e.g. framerate=9999, width=99999, or a
-                // bitrate no decoder claims) MUST receive the genuine device
-                // answer. The player cross-checks a realistic probe against an
-                // impossible one to catch lying implementations; a blanket `true`
-                // flips its capability verdict, which blocks every >32fps format
-                // (capHfr) and pins live ladders at 480p. Bare codec queries
-                // (format listing) keep the affirmed answer below.
-                if (/;\s*(width|height|framerate|bitrate|bit-depth|channels)\s*=/.test(lower)) {
-                    try { return origIsTypeSupported(mimeType); } catch (e0) { return false; }
+
+                // YouTube TV sanity probe defense:
+                // Reject impossible probe values (Ip) explicitly so the player's
+                // cross-check (valid && !invalid) passes. Without this, Chromium MSE
+                // returns true for impossible probes (e.g. framerate=9999, height=99999),
+                // causing the player to flag the device as lying and cap HFR (>32fps) to 480p/720p!
+                var fpsM = lower.match(/framerate\s*=\s*(\d+)/);
+                if (fpsM && parseInt(fpsM[1], 10) > 120) return false;
+
+                var hM = lower.match(/height\s*=\s*(\d+)/);
+                if (hM && parseInt(hM[1], 10) > 4320) return false;
+
+                var wM = lower.match(/width\s*=\s*(\d+)/);
+                if (wM && parseInt(wM[1], 10) > 7680) return false;
+
+                var brM = lower.match(/bitrate\s*=\s*(\d+)/);
+                if (brM && parseInt(brM[1], 10) >= 20000000) return false;
+
+                var chM = lower.match(/channels\s*=\s*(\d+)/);
+                if (chM && parseInt(chM[1], 10) > 8) return false;
+
+                if (lower.indexOf('catavision') !== -1 ||
+                    lower.indexOf('invalidformat') !== -1 ||
+                    lower.indexOf('decode-to-texture=nope') !== -1 ||
+                    lower.indexOf('av99') !== -1 ||
+                    lower.indexOf('experimental=invalid') !== -1 ||
+                    lower.indexOf('tunnelmode=false') !== -1) {
+                    return false;
                 }
-                // Video: VP8/VP9/AV1/H.264 (proven decodable via WebView MSE).
-                // NOTE: HEVC (hev1/hvc1) is deliberately NOT affirmed: claiming an
-                // undecodable codec makes ABR pick it, fail, and cascade down to
-                // 720p. Audio: affirm common codecs so audio filtering never
-                // drops a ladder entry.
+
+                // For normal realistic parameters (framerate<=120, height<=4320, etc.)
+                // or bare queries, affirm proven codecs so HFR/4K/8K formats are unlocked.
                 if (lower.indexOf('vp09') !== -1 ||
                     lower.indexOf('vp9') !== -1 ||
                     lower.indexOf('vp08') !== -1 ||
@@ -609,7 +626,7 @@
     // hd1440 whenever UHD is evidenced (current playback quality or actual
     // decoded frame size). Selecting them works because the formats exist.
     // =========================================================================
-    var QUALITY_ORDER = ['hd2880', 'hd2160', 'hd1440', 'hd1080', 'hd720', 'large', 'medium', 'small', 'tiny'];
+    var QUALITY_ORDER = ['hd4320', 'hd2880', 'hd2160', 'hd1440', 'hd1080', 'hd720', 'large', 'medium', 'small', 'tiny'];
 
     function k2QualityRank(q) {
         var i = QUALITY_ORDER.indexOf(q);
@@ -617,34 +634,103 @@
     }
 
     function k2MissingHigh(player, have) {
-        var need2160 = false, need1440 = false;
-        try {
-            var cur = (player && typeof player.getPlaybackQuality === 'function') ? player.getPlaybackQuality() : '';
-            if (cur === 'hd2880' || cur === 'hd2160') { need2160 = true; need1440 = true; }
-            else if (cur === 'hd1440') { need1440 = true; }
-        } catch (e) {}
-        try {
-            var v = document.querySelector('video');
-            if (v && v.videoWidth >= 3700) { need2160 = true; need1440 = true; }
-            else if (v && v.videoWidth >= 2500) { need1440 = true; }
-        } catch (e2) {}
-        try {
-            // Session peak per video: if this video already played at UHD (even
-            // if ABR currently dipped), the formats provably exist.
-            var mr = (typeof window._k2MaxRank === 'number') ? window._k2MaxRank : 999;
-            if (mr <= 1) { need2160 = true; need1440 = true; }
-            else if (mr <= 2) { need1440 = true; }
-        } catch (e3) {}
         var out = [];
-        if (need2160 && !have['hd2160']) out.push('hd2160');
-        if (need1440 && !have['hd1440']) out.push('hd1440');
+        try {
+            var formats = [];
+            try {
+                var resp = (player && typeof player.getPlayerResponse === 'function') ? player.getPlayerResponse() : null;
+                if (resp && resp.streamingData) {
+                    formats = resp.streamingData.adaptiveFormats || [];
+                }
+            } catch (e0) {}
+
+            var has4320 = false, has2160 = false, has1440 = false, has1080 = false, has720 = false;
+            for (var i = 0; i < formats.length; i++) {
+                var f = formats[i];
+                if (!f) continue;
+                var h = f.height || 0;
+                var q = (f.quality || '') + (f.qualityLabel || '');
+                if (h >= 4320 || q.indexOf('4320') !== -1) has4320 = true;
+                if (h >= 2160 || q.indexOf('2160') !== -1) has2160 = true;
+                if (h >= 1440 || q.indexOf('1440') !== -1) has1440 = true;
+                if (h >= 1080 || q.indexOf('1080') !== -1) has1080 = true;
+                if (h >= 720 || q.indexOf('720') !== -1) has720 = true;
+            }
+
+            var cur = (player && typeof player.getPlaybackQuality === 'function') ? player.getPlaybackQuality() : '';
+            var curRank = k2QualityRank(cur);
+            var v = document.querySelector('video');
+            var vw = v ? v.videoWidth : 0;
+            if (vw >= 7000 || curRank === 0) has4320 = true;
+            if (vw >= 3700 || curRank <= 2) has2160 = true;
+            if (vw >= 2500 || curRank <= 3) has1440 = true;
+            if (vw >= 1800 || curRank <= 4) has1080 = true;
+            if (vw >= 1200 || curRank <= 5) has720 = true;
+
+            if (has4320 && !have['hd4320']) out.push('hd4320');
+            if (has2160 && !have['hd2160']) out.push('hd2160');
+            if (has1440 && !have['hd1440']) out.push('hd1440');
+            if (has1080 && !have['hd1080']) out.push('hd1080');
+            if (has720 && !have['hd720']) out.push('hd720');
+        } catch (e) {}
         return out;
+    }
+
+    var _k2LastBoostedVideoId = '';
+    function k2AutoBoostQuality(player) {
+        if (!player) return;
+        try {
+            var vData = typeof player.getVideoData === 'function' ? player.getVideoData() : null;
+            var vid = vData ? vData.video_id : '';
+            if (vid && vid !== _k2LastBoostedVideoId) {
+                _k2LastBoostedVideoId = vid;
+                player._k2BoostedRank = 999;
+            }
+
+            var levels = typeof player.getAvailableQualityLevels === 'function' ? player.getAvailableQualityLevels() : [];
+            if (!levels || !levels.length) return;
+
+            // Find highest non-auto quality level
+            var highest = null;
+            for (var i = 0; i < QUALITY_ORDER.length; i++) {
+                var q = QUALITY_ORDER[i];
+                if (levels.indexOf(q) !== -1) {
+                    highest = q;
+                    break;
+                }
+            }
+
+            if (highest) {
+                var hRank = k2QualityRank(highest);
+                var cur = typeof player.getPlaybackQuality === 'function' ? player.getPlaybackQuality() : '';
+                var curRank = k2QualityRank(cur);
+
+                var lastBoostRank = (typeof player._k2BoostedRank === 'number') ? player._k2BoostedRank : 999;
+                if (hRank < lastBoostRank && (curRank > hRank || cur === 'auto' || !cur)) {
+                    if (typeof player.setPlaybackQualityRange === 'function') {
+                        player.setPlaybackQualityRange(highest, highest);
+                    }
+                    if (typeof player.setPlaybackQuality === 'function') {
+                        player.setPlaybackQuality(highest);
+                    }
+                    player._k2BoostedRank = hRank;
+                    console.log('[ZeroAd] Auto-boosted quality to ' + highest + ' (rank ' + hRank + ', was ' + cur + ', isLive=' + (vData ? vData.isLive : false) + ')');
+                } else if (curRank <= hRank && hRank < lastBoostRank) {
+                    player._k2BoostedRank = hRank;
+                }
+            }
+        } catch (e) {}
     }
 
     function k2EnsureQualityWrap() {
         try {
             var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
-            if (!player || player._k2QWrapped) return;
+            if (!player) return;
+
+            // Continually monitor and auto-boost quality to the highest available level
+            k2AutoBoostQuality(player);
+
+            if (player._k2QWrapped) return;
             var wrappedAny = false;
 
             if (typeof player.getAvailableQualityLevels === 'function') {
@@ -656,13 +742,14 @@
                     var have = {};
                     for (var i = 0; i < list.length; i++) have[list[i]] = true;
                     var extra = k2MissingHigh(player, have);
-                    if (!extra.length) return list;
                     var out = list.slice();
-                    for (var k = 0; k < extra.length; k++) out.push(extra[k]);
-                    var auto = out.indexOf('auto') !== -1;
+                    if (extra.length) {
+                        for (var k = 0; k < extra.length; k++) out.push(extra[k]);
+                    }
+                    var hasAuto = out.indexOf('auto') !== -1;
                     out = out.filter(function(q) { return q !== 'auto'; });
                     out.sort(function(a, b) { return k2QualityRank(a) - k2QualityRank(b); });
-                    if (auto) out.unshift('auto');
+                    if (hasAuto) out.push('auto');
                     return out;
                 };
                 wrappedAny = true;
@@ -674,10 +761,6 @@
                     var arr = [];
                     try { arr = _origData() || []; } catch (e2) {}
                     if (!arr.length) return arr;
-                    // Shape-agnostic data clone: duplicate the 1080p entry and
-                    // rewrite its quality-ish fields to 2160p/1440p. The app then
-                    // renders/focuses/selects them with its own correct layout —
-                    // no DOM surgery, no broken rows.
                     try {
                         var have = {}, tpl = null;
                         for (var i = 0; i < arr.length; i++) {
@@ -685,29 +768,39 @@
                             if (!it || typeof it !== 'object') continue;
                             var sig = '';
                             try { sig = JSON.stringify(it); } catch (e3) { continue; }
+                            if (/\b4320\b/.test(sig)) have['hd4320'] = true;
                             if (/\b2160\b/.test(sig)) have['hd2160'] = true;
                             if (/\b1440\b/.test(sig)) have['hd1440'] = true;
-                            if (!tpl && /\b1080\b/.test(sig)) tpl = it;
+                            if (/\b1080\b/.test(sig)) have['hd1080'] = true;
+                            if (/\b720\b/.test(sig)) have['hd720'] = true;
+                            if (!tpl) tpl = it;
+                            if (/\b1080\b/.test(sig) || /\b720\b/.test(sig)) tpl = it;
                         }
                         var extra = k2MissingHigh(player, have);
                         if (extra.length && tpl) {
                             for (var k = 0; k < extra.length; k++) {
-                                var num = extra[k].replace('hd', '');
+                                var qName = extra[k];
+                                var num = qName.replace('hd', '');
                                 var clone = null;
                                 try { clone = JSON.parse(JSON.stringify(tpl)); } catch (e4) {}
                                 if (!clone) continue;
                                 for (var f in clone) {
-                                    if (typeof clone[f] === 'string' && /\b1080\b/.test(clone[f]) &&
-                                        /qual|label|level|name|id|height/i.test(f)) {
-                                        clone[f] = clone[f].replace(/1080/g, num);
-                                    } else if (typeof clone[f] === 'number' && clone[f] === 1080 &&
-                                               /qual|label|level|name|id|height/i.test(f)) {
+                                    if (typeof clone[f] === 'string') {
+                                        if (/qual/i.test(f)) clone[f] = qName;
+                                        else if (/label/i.test(f)) clone[f] = num + 'p';
+                                        else if (/level|name|id/i.test(f)) clone[f] = clone[f].replace(/\d{3,4}/g, num);
+                                    } else if (typeof clone[f] === 'number' && /height|qual|level/i.test(f)) {
                                         clone[f] = parseInt(num, 10);
                                     }
                                 }
                                 arr.push(clone);
                             }
                         }
+                        arr.sort(function(a, b) {
+                            var qa = (a && (a.quality || a.formatId || '')) || '';
+                            var qb = (b && (b.quality || b.formatId || '')) || '';
+                            return k2QualityRank(qa) - k2QualityRank(qb);
+                        });
                     } catch (e5) {}
                     return arr;
                 };
@@ -716,23 +809,17 @@
 
             if (wrappedAny) {
                 player._k2QWrapped = true;
-                console.log('[ZeroAd] quality menu API wrapped for UHD exposure.');
-                try {
-                    if (typeof _origLevels === 'function') {
-                        var _raw = _origLevels() || [];
-                        console.log('[ZeroAd-Telemetry] rawLevels=[' + _raw.join(',') + ']');
-                    }
-                } catch (e9) {}
-                try {
-                    if (typeof _origData === 'function') {
-                        var _rd = _origData() || [];
-                        var _k0 = (_rd.length && _rd[0] && typeof _rd[0] === 'object') ? Object.keys(_rd[0]).join(',') : String(typeof _rd[0]);
-                        console.log('[ZeroAd-Telemetry] rawDataShape=[' + _k0 + '] len=' + _rd.length);
-                    }
-                } catch (e10) {}
+                console.log('[ZeroAd] quality menu API wrapped for full 8K/4K/HFR exposure.');
             }
         } catch (e) {}
     }
+
+    // Hook video playing event to trigger immediate quality promotion
+    document.addEventListener('playing', function(e) {
+        if (e.target && e.target.tagName === 'VIDEO') {
+            try { k2EnsureQualityWrap(); } catch (err) {}
+        }
+    }, true);
 
     // =========================================================================
     // 5d. Back-Navigation & Home Protection
@@ -756,6 +843,7 @@
             if (hash.indexOf('settings') === -1 && href.indexOf('settings') === -1 && !document.querySelector('ytlr-tab-renderer')) {
                 window._k2SettingsFirstTabSynced = false;
             }
+            k2EnsureQualityWrap();
         } catch (e) {}
     }, 1000);
 
