@@ -1,25 +1,30 @@
-# 작업 보드: 설정 메뉴 '동영상 속도(일반/기타 속도)' 변경 시 속도 전환 미반영 버그 정밀 수정
+# 작업 진행 상황 (Task Board)
 
-## 1. 개요 및 사용자 요구사항
-- **현상**:
-  - 리모컨 채널 핫키로 배속을 조절(예: 2.0x, 3.0x 등)한 후, 설정 메뉴(톱니바퀴 -> 동영상 속도)에서 '일반(1.0x)' 또는 다른 속도를 선택해도 2.0x에서 변경되지 않고 강제 유지되는 현상 발생.
-- **원인**:
-  - `<video>`의 `ratechange` 이벤트 핸들러가 `window._k2CurrentSpeed`로 강제 복원(revert)하고 있었음.
-  - 메뉴 클릭 시 2번째 인자가 없어 persistent 저장이 누락되고 브릿지가 호출되지 않음.
-- **목표**:
-  - 메뉴에서 '일반' 선택 시 즉시 1.0배속으로 전환 및 `⚡ 1.0x (일반)` OSD 표시.
-  - 메뉴에서 어떤 속도를 선택하더라도 정상 반영 및 OSD 동기화.
-  - 리모컨 핫키와 메뉴 속도 조절 간 상호 완벽한 동기화.
-  - 다음 영상 전환 시 속도 유지 보장.
-  - 실제 Android TV 기기(`192.168.100.121:5555`)에서 실시간 검증 및 캡처.
+## 목표
+1. **컴팩트 OSD 속도 배지 복원 및 디자인 개선**:
+   - 리모컨 채널 버튼(`CH +` / `CH -`) 조작 시 우상단에 재생속도 안내 배지가 확실하게 노출되도록 보장.
+   - 크기를 기존(거대한 28px/패딩 26px)에서 컴팩트하고 깔끔한 미니멀 디자인(폰트 16px, 패딩 6px 14px, 모던 네온 스타일)으로 축소.
+2. **고배속에서 일반(1.0x) 전환 시 비디오 멎음(Stalling/Freezing) 방지**:
+   - 2배속 이상에서 메뉴 또는 리모컨으로 1.0x(일반)로 변경할 때 Chromium 미디어 파이프라인의 디코더/버퍼 타임스탬프 불일치로 인한 재생 멎음(stalling) 방지 및 자동 재생 회복 처리.
 
-## 2. 작업 단계
-- [x] 1. 문제 원인 역공학 및 CDP 재현 분석 완료
-- [x] 2. `implementation_plan_fix_speed_menu_sync_20261017.md` 계획서 작성
-- [x] 3. `h5vcc_polyfill.js` `ratechange` 강제 복원 제거 및 `window.k2OnSpeedChange` 브릿지 구현
-- [x] 4. `TVWebViewClient.kt` `P.setPlaybackRate` 브릿지/영구저장 연동 및 `iIZ` 초기화 보정
-- [x] 5. 사후 빌드 확인 (`.\gradlew.bat assembleDebug`)
-- [x] 6. TV 기기(`192.168.100.121:5555`) APK 재배포 및 설치
-- [x] 7. 실제 TV에서 2x 설정 후 메뉴에서 '일반' 선택 시 1.0배속 정상 전환 실시간 검증
-- [x] 8. 결과 리포트 (`walkthrough_fix_speed_menu_sync_20261017.md`) 작성
-- [x] 9. Git 커밋 및 푸시
+---
+
+## 작업 목록
+
+- [x] **1. 현상 분석 및 원인 파악**
+  - [x] 현재 Android TV 기기(`192.168.100.121:5555`) 화면 및 CDP 연결 확인
+  - [x] 리모컨 CH 버튼 입력 시 JS 브릿지 전달 및 OSD 배지 DOM 부착 상태 점검 (원인 규명: YouTube TV Trusted Types 정책 위반으로 인한 innerHTML 예외 발생)
+  - [x] 배속 변경(고배속 -> 일반) 시 video.paused 및 stalled 상태 점검
+- [x] **2. 수술적 코드 수정**
+  - [x] `h5vcc_polyfill.js`:
+    - `showSpeedOsd`: Trusted Types 완벽 준수(`createElement`, `textContent`, `appendChild`), 세련되고 아담한 컴팩트 네온 배지(폰트 16px, 패딩 6px 14px, 우상단 여백 32px, `z-index: 2147483647`, 반투명 네온 테두리) 리팩토링 및 최상위 뷰 부착 보장
+    - 속도 변경 함수(`k2SetPlaybackRate`, `k2OnSpeedChange`, `player.setPlaybackRate`): 배속 다운시프트 시 비디오 멎음 방지 및 즉각 재생 킥(`k2ProtectAgainstStall`, `pause`/`waiting` 리스너) 추가
+- [x] **3. 빌드 및 배포**
+  - [x] Gradle 빌드: `.\gradlew.bat assembleDebug` 성공
+  - [x] 기기 설치: `adb install -r YT_TV_AC.apk` 성공
+- [x] **4. 실제 TV 실시간 검증**
+  - [x] 리모컨 `CH +` / `CH -` 키 입력 시 아담한 OSD 배지가 우상단에 선명하게 뜨는지 캡처 (`tv_screen_badge_175.png`)
+  - [x] 고배속(2x, 3x) -> 메뉴에서 일반(1.0x) 전환 시 영상이 멎지 않고 정상 재생되는지 검증 (`tv_screen_normal_badge_snap.png`)
+- [x] **5. 문서화 및 커밋**
+  - [x] `.agents/walkthrough_compact_osd_and_stall_fix_20261017.md` 작성
+  - [ ] Git commit & push

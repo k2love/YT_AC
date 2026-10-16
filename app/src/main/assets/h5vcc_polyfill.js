@@ -1612,47 +1612,91 @@
 
     function showSpeedOsd(rate) {
         try {
+            var parent = document.fullscreenElement || document.body;
+            if (!parent) return;
+
             var badge = document.getElementById('k2-speed-badge');
             if (!badge) {
                 badge = document.createElement('div');
                 badge.id = 'k2-speed-badge';
                 badge.style.cssText = [
                     'position: fixed',
-                    'top: 48px',
-                    'right: 48px',
-                    'background: rgba(18, 18, 18, 0.90)',
+                    'top: 32px',
+                    'right: 32px',
+                    'background: rgba(18, 18, 18, 0.92)',
                     'color: #00e5ff',
-                    'border: 2px solid rgba(0, 229, 255, 0.7)',
-                    'border-radius: 12px',
-                    'padding: 12px 26px',
-                    'font-size: 28px',
+                    'border: 1.5px solid rgba(0, 229, 255, 0.8)',
+                    'border-radius: 8px',
+                    'padding: 6px 14px',
+                    'font-size: 16px',
                     'font-weight: 700',
                     'font-family: Roboto, sans-serif',
                     'letter-spacing: 0.5px',
-                    'box-shadow: 0 8px 32px rgba(0,0,0,0.85)',
-                    'z-index: 9999999',
+                    'box-shadow: 0 4px 16px rgba(0,0,0,0.85)',
+                    'z-index: 2147483647',
                     'display: flex',
                     'align-items: center',
-                    'gap: 12px',
-                    'transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    'gap: 8px',
+                    'transition: opacity 0.25s ease, transform 0.25s ease',
                     'pointer-events: none',
                     'opacity: 0',
-                    'transform: translateY(-10px) scale(0.95)'
+                    'transform: translateY(-8px) scale(0.96)'
                 ].join(';');
-                document.body.appendChild(badge);
             }
 
-            var label = (rate === 1.0) ? '1.0x (\uc77c\ubc18)' : (rate + 'x \uc18d\ub3c4');
-            badge.innerHTML = '<span style="font-size:32px;">\u26a1</span> <span>' + label + '</span>';
+            // Ensure attached to top-most container
+            if (badge.parentElement !== parent) {
+                parent.appendChild(badge);
+            }
+
+            while (badge.firstChild) {
+                badge.removeChild(badge.firstChild);
+            }
+
+            var icon = document.createElement('span');
+            icon.textContent = '⚡';
+            icon.style.fontSize = '18px';
+
+            var label = (rate === 1.0) ? '1.0x (일반)' : (rate + 'x 속도');
+            var text = document.createElement('span');
+            text.textContent = label;
+
+            badge.appendChild(icon);
+            badge.appendChild(text);
+
             badge.style.opacity = '1';
             badge.style.transform = 'translateY(0) scale(1)';
 
             if (badge._timer) clearTimeout(badge._timer);
             badge._timer = setTimeout(function() {
                 badge.style.opacity = '0';
-                badge.style.transform = 'translateY(-10px) scale(0.95)';
-            }, 1800);
-        } catch (eOsd) {}
+                badge.style.transform = 'translateY(-8px) scale(0.96)';
+            }, 1600);
+        } catch (eOsd) {
+            console.warn('[ZeroAd] OSD error:', eOsd);
+        }
+    }
+    window.showSpeedOsd = showSpeedOsd;
+
+    function k2KickVideoPlay(v) {
+        if (!v) return;
+        try {
+            if (v.paused) {
+                var p = v.play();
+                if (p && typeof p.catch === 'function') p.catch(function() {});
+            }
+        } catch (e) {}
+    }
+
+    function k2ProtectAgainstStall(v) {
+        if (!v) return;
+        window._k2SpeedChanging = true;
+        k2KickVideoPlay(v);
+        setTimeout(function() { k2KickVideoPlay(v); }, 50);
+        setTimeout(function() { k2KickVideoPlay(v); }, 150);
+        setTimeout(function() { k2KickVideoPlay(v); }, 350);
+        setTimeout(function() { k2KickVideoPlay(v); }, 700);
+        setTimeout(function() { window._k2SpeedChanging = false; }, 1200);
     }
 
     window.k2SetPlaybackRate = function(rate) {
@@ -1663,7 +1707,10 @@
 
             var vids = document.querySelectorAll('video');
             for (var i = 0; i < vids.length; i++) {
-                try { vids[i].playbackRate = r; } catch (eV) {}
+                try {
+                    vids[i].playbackRate = r;
+                    k2ProtectAgainstStall(vids[i]);
+                } catch (eV) {}
             }
 
             var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
@@ -1721,7 +1768,10 @@
                         if (!isNaN(r) && r > 0) {
                             window._k2CurrentSpeed = r;
                             var v = document.querySelector('video');
-                            if (v) v.playbackRate = r;
+                            if (v) {
+                                v.playbackRate = r;
+                                k2ProtectAgainstStall(v);
+                            }
                             try {
                                 localStorage.setItem('yt-player-playback-rate', JSON.stringify({
                                     data: String(r),
@@ -1743,8 +1793,11 @@
             if (!isNaN(r) && r > 0) {
                 window._k2CurrentSpeed = r;
                 var v = document.querySelector('video');
-                if (v && Math.abs(v.playbackRate - r) > 0.01) {
-                    try { v.playbackRate = r; } catch (eV) {}
+                if (v) {
+                    if (Math.abs(v.playbackRate - r) > 0.01) {
+                        try { v.playbackRate = r; } catch (eV) {}
+                    }
+                    k2ProtectAgainstStall(v);
                 }
                 try {
                     localStorage.setItem('yt-player-playback-rate', JSON.stringify({
@@ -1769,6 +1822,16 @@
                             if (Math.abs(this.playbackRate - window._k2CurrentSpeed) > 0.01) {
                                 this.playbackRate = window._k2CurrentSpeed;
                             }
+                        }
+                    });
+                    v.addEventListener('pause', function() {
+                        if (window._k2SpeedChanging) {
+                            k2KickVideoPlay(this);
+                        }
+                    });
+                    v.addEventListener('waiting', function() {
+                        if (window._k2SpeedChanging) {
+                            k2KickVideoPlay(this);
                         }
                     });
                 }
