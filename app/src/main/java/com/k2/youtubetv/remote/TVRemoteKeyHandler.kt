@@ -78,6 +78,18 @@ class TVRemoteKeyHandler(
                 dispatchJsKeyEvent(webView, "i", 73)
                 true
             }
+            KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP, KeyEvent.KEYCODE_PROG_GREEN -> {
+                evaluateJs(webView, "if (window.k2AdjustPlaybackRate) window.k2AdjustPlaybackRate(1);")
+                true
+            }
+            KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_PAGE_DOWN, KeyEvent.KEYCODE_PROG_RED -> {
+                evaluateJs(webView, "if (window.k2AdjustPlaybackRate) window.k2AdjustPlaybackRate(-1);")
+                true
+            }
+            KeyEvent.KEYCODE_PROG_YELLOW -> {
+                evaluateJs(webView, "if (window.k2SetPlaybackRate) window.k2SetPlaybackRate(1.0);")
+                true
+            }
             else -> false
         }
     }

@@ -352,6 +352,17 @@ class TVWebViewClient(private val context: Context) : WebViewClient() {
                 js = js.replace(hfrGate, "if(!1)return\"capHfr\";")
                 Log.d(TAG, "[4K-Unlock] HFR capHfr gate disabled x$hfrCount")
                 if (hfrCount == 0) Log.w(TAG, "[4K-Unlock] capHfr gate NOT found — check obfuscation drift!")
+
+                // Patch playback speed upper limit (unlock 2.0x limit to 4.0x)
+                // 1) Default max playback rate: this.nM=2; -> this.nM=4;
+                val nmCount = js.split("this.nM=2;").size - 1
+                js = js.replace("this.nM=2;", "this.nM=4;")
+                Log.d(TAG, "[Speed-Unlock] default max rate nM=2 patched to 4 x$nmCount")
+
+                // 2) Server granularVariableSpeedConfig clamp: this.nM=gm/100 -> this.nM=Math.max(4,gm/100)
+                val gmCount = js.split("this.nM=gm/100").size - 1
+                js = js.replace("this.nM=gm/100", "this.nM=Math.max(4,gm/100)")
+                Log.d(TAG, "[Speed-Unlock] granular server rate clamp patched to max(4,gm/100) x$gmCount")
             }
 
             val bytes = js.toByteArray(Charsets.UTF_8)

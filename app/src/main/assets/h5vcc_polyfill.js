@@ -139,6 +139,66 @@
         'adlayouts': true
     };
 
+    function k2ExpandSpeedItemsInArray(items) {
+        if (!Array.isArray(items) || items.length === 0) return;
+        var hasSpeedItem = false;
+        var template2xItem = null;
+        for (var si = 0; si < items.length; si++) {
+            var it = items[si];
+            var clr = it && it.compactLinkRenderer;
+            if (clr && clr.serviceEndpoint && clr.serviceEndpoint.commandExecutorCommand) {
+                var cmds = clr.serviceEndpoint.commandExecutorCommand.commands || [];
+                for (var ci = 0; ci < cmds.length; ci++) {
+                    var scs = cmds[ci].setClientSettingEndpoint;
+                    if (scs && scs.settingDatas) {
+                        for (var sdi = 0; sdi < scs.settingDatas.length; sdi++) {
+                            if (scs.settingDatas[sdi].clientSettingEnum &&
+                                scs.settingDatas[sdi].clientSettingEnum.item === "PLAYBACK_SPEED") {
+                                hasSpeedItem = true;
+                                var iv = String(scs.settingDatas[sdi].intValue);
+                                if (iv === "2" || iv === "2.0") {
+                                    template2xItem = it;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (hasSpeedItem && template2xItem) {
+            var alreadyHas4x = items.some(function(item) {
+                var t = item && item.compactLinkRenderer && item.compactLinkRenderer.title && item.compactLinkRenderer.title.simpleText;
+                return t && (t.indexOf('4\u00d7') !== -1 || t.indexOf('4x') !== -1);
+            });
+            if (!alreadyHas4x) {
+                var extraSpeeds = [
+                    { label: '2.25\u00d7', val: '2.25' },
+                    { label: '2.5\u00d7', val: '2.5' },
+                    { label: '2.75\u00d7', val: '2.75' },
+                    { label: '3\u00d7', val: '3' },
+                    { label: '3.5\u00d7', val: '3.5' },
+                    { label: '4\u00d7', val: '4' }
+                ];
+                for (var ei = 0; ei < extraSpeeds.length; ei++) {
+                    try {
+                        var extraItem = JSON.parse(JSON.stringify(template2xItem));
+                        extraItem.compactLinkRenderer.title.simpleText = extraSpeeds[ei].label;
+                        if (extraItem.compactLinkRenderer.secondaryIcon) {
+                            extraItem.compactLinkRenderer.secondaryIcon.iconType = 'RADIO_BUTTON_UNCHECKED';
+                        }
+                        var eCmds = extraItem.compactLinkRenderer.serviceEndpoint.commandExecutorCommand.commands;
+                        for (var ec = 0; ec < eCmds.length; ec++) {
+                            if (eCmds[ec].setClientSettingEndpoint && eCmds[ec].setClientSettingEndpoint.settingDatas) {
+                                eCmds[ec].setClientSettingEndpoint.settingDatas[0].intValue = extraSpeeds[ei].val;
+                            }
+                        }
+                        items.push(extraItem);
+                    } catch (eExp) {}
+                }
+            }
+        }
+    }
+
     function sanitizeAdsDirectly(obj) {
         if (!obj || typeof obj !== 'object') return;
 
@@ -165,6 +225,7 @@
         }
 
         if (Array.isArray(obj)) {
+            k2ExpandSpeedItemsInArray(obj);
             for (var i = obj.length - 1; i >= 0; i--) {
                 var item = obj[i];
                 if (typeof item === 'string') {
@@ -221,6 +282,12 @@
                 sanitizeAdsDirectly(item);
             }
         } else {
+            if (obj.items && Array.isArray(obj.items)) {
+                k2ExpandSpeedItemsInArray(obj.items);
+            }
+            if (obj.granularVariableSpeedConfig && typeof obj.granularVariableSpeedConfig === 'object') {
+                obj.granularVariableSpeedConfig.maximumPlaybackRate = 400;
+            }
             for (var key in obj) {
                 var lower = key.toLowerCase();
                 if (AD_KEYS[lower]) {
@@ -1525,6 +1592,190 @@
 
     setInterval(k2PatchHelpCenterPanel, 1000);
     setInterval(k2PatchFeedbackPanel, 1000);
+
+    // =========================================================================
+    // 14. Playback Speed Unlock (Up to 4.0x), OSD Badge & Remote Hotkeys Bridge
+    // =========================================================================
+    var K2_SPEED_RATES = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.5, 4.0];
+    window._k2CurrentSpeed = 1.0;
+
+    try {
+        var savedRateStr = localStorage.getItem('yt-player-playback-rate');
+        if (savedRateStr) {
+            var parsed = JSON.parse(savedRateStr);
+            var rVal = Number(parsed && (parsed.data || parsed));
+            if (!isNaN(rVal) && rVal >= 0.25 && rVal <= 4.0) {
+                window._k2CurrentSpeed = rVal;
+            }
+        }
+    } catch (eSpeedInit) {}
+
+    function showSpeedOsd(rate) {
+        try {
+            var badge = document.getElementById('k2-speed-badge');
+            if (!badge) {
+                badge = document.createElement('div');
+                badge.id = 'k2-speed-badge';
+                badge.style.cssText = [
+                    'position: fixed',
+                    'top: 48px',
+                    'right: 48px',
+                    'background: rgba(18, 18, 18, 0.90)',
+                    'color: #00e5ff',
+                    'border: 2px solid rgba(0, 229, 255, 0.7)',
+                    'border-radius: 12px',
+                    'padding: 12px 26px',
+                    'font-size: 28px',
+                    'font-weight: 700',
+                    'font-family: Roboto, sans-serif',
+                    'letter-spacing: 0.5px',
+                    'box-shadow: 0 8px 32px rgba(0,0,0,0.85)',
+                    'z-index: 9999999',
+                    'display: flex',
+                    'align-items: center',
+                    'gap: 12px',
+                    'transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    'pointer-events: none',
+                    'opacity: 0',
+                    'transform: translateY(-10px) scale(0.95)'
+                ].join(';');
+                document.body.appendChild(badge);
+            }
+
+            var label = (rate === 1.0) ? '1.0x (\uc77c\ubc18)' : (rate + 'x \uc18d\ub3c4');
+            badge.innerHTML = '<span style="font-size:32px;">\u26a1</span> <span>' + label + '</span>';
+            badge.style.opacity = '1';
+            badge.style.transform = 'translateY(0) scale(1)';
+
+            if (badge._timer) clearTimeout(badge._timer);
+            badge._timer = setTimeout(function() {
+                badge.style.opacity = '0';
+                badge.style.transform = 'translateY(-10px) scale(0.95)';
+            }, 1800);
+        } catch (eOsd) {}
+    }
+
+    window.k2SetPlaybackRate = function(rate) {
+        try {
+            var r = Number(rate);
+            if (isNaN(r) || r < 0.25 || r > 4.0) return;
+            window._k2CurrentSpeed = r;
+
+            var vids = document.querySelectorAll('video');
+            for (var i = 0; i < vids.length; i++) {
+                try { vids[i].playbackRate = r; } catch (eV) {}
+            }
+
+            var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+            if (player) {
+                if (typeof player.setPlaybackRate === 'function') {
+                    try { player.setPlaybackRate(r); } catch (eP) {}
+                }
+            }
+
+            try {
+                localStorage.setItem('yt-player-playback-rate', JSON.stringify({
+                    data: String(r),
+                    expiration: Date.now() + 86400000 * 30
+                }));
+            } catch (eStore) {}
+
+            showSpeedOsd(r);
+        } catch (eSetRate) {
+            console.warn('[ZeroAd] Error setting playback rate:', eSetRate);
+        }
+    };
+
+    window.k2AdjustPlaybackRate = function(delta) {
+        try {
+            var cur = window._k2CurrentSpeed || 1.0;
+            var curIdx = 3; // default 1.0
+            var minDiff = 999;
+            for (var i = 0; i < K2_SPEED_RATES.length; i++) {
+                var diff = Math.abs(K2_SPEED_RATES[i] - cur);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    curIdx = i;
+                }
+            }
+            var nextIdx = curIdx + delta;
+            if (nextIdx < 0) nextIdx = 0;
+            if (nextIdx >= K2_SPEED_RATES.length) nextIdx = K2_SPEED_RATES.length - 1;
+            window.k2SetPlaybackRate(K2_SPEED_RATES[nextIdx]);
+        } catch (eAdj) {}
+    };
+
+    function k2HookPlayerRateMethods() {
+        try {
+            var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+            if (player && !player._k2RateHooked) {
+                player._k2RateHooked = true;
+                player.getAvailablePlaybackRates = function() {
+                    return K2_SPEED_RATES;
+                };
+
+                var origSetRate = player.setPlaybackRate;
+                if (typeof origSetRate === 'function') {
+                    player.setPlaybackRate = function(rate) {
+                        var r = Number(rate);
+                        if (!isNaN(r) && r > 0) {
+                            window._k2CurrentSpeed = r;
+                            var v = document.querySelector('video');
+                            if (v) v.playbackRate = r;
+                            try {
+                                localStorage.setItem('yt-player-playback-rate', JSON.stringify({
+                                    data: String(r),
+                                    expiration: Date.now() + 86400000 * 30
+                                }));
+                            } catch (eLs) {}
+                            showSpeedOsd(r);
+                        }
+                        return origSetRate.apply(this, arguments);
+                    };
+                }
+            }
+        } catch (eHookPl) {}
+    }
+
+    function k2EnsureSpeedOnPlaying() {
+        try {
+            var vids = document.querySelectorAll('video');
+            for (var i = 0; i < vids.length; i++) {
+                var v = vids[i];
+                if (!v._k2SpeedHooked) {
+                    v._k2SpeedHooked = true;
+                    v.addEventListener('playing', function() {
+                        if (window._k2CurrentSpeed && window._k2CurrentSpeed !== 1.0) {
+                            this.playbackRate = window._k2CurrentSpeed;
+                        }
+                    });
+                    v.addEventListener('ratechange', function() {
+                        if (window._k2CurrentSpeed && window._k2CurrentSpeed !== 1.0) {
+                            if (Math.abs(this.playbackRate - window._k2CurrentSpeed) > 0.01) {
+                                this.playbackRate = window._k2CurrentSpeed;
+                            }
+                        }
+                    });
+                }
+            }
+            k2HookPlayerRateMethods();
+        } catch (ePl) {}
+    }
+
+    function k2ExpandLiveSpeedMenu() {
+        try {
+            var panels = document.querySelectorAll('ytlr-overlay-panel-item-list-renderer');
+            for (var pi = 0; pi < panels.length; pi++) {
+                var p = panels[pi];
+                if (p.__instance && p.__instance.props && p.__instance.props.data && p.__instance.props.data.items) {
+                    k2ExpandSpeedItemsInArray(p.__instance.props.data.items);
+                }
+            }
+        } catch (e) {}
+    }
+
+    setInterval(k2ExpandLiveSpeedMenu, 300);
+    setInterval(k2EnsureSpeedOnPlaying, 1000);
 
     console.log("[ZeroAd] Ultra-Clean Zero-Ad Engine v8 fully engaged.");
 })();
