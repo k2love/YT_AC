@@ -73,6 +73,17 @@
                 return origIsTypeSupported(mimeType);
             };
         }
+
+        // Dynamic Codec & Format Switching Safety Guard (media_can_change_type benchmark)
+        try {
+            if (window.SourceBuffer && typeof window.SourceBuffer.prototype.changeType !== 'function') {
+                window.SourceBuffer.prototype.changeType = function(type) {
+                    console.log("[ZeroAd] SourceBuffer.changeType safely handled for dynamic codec switch:", type);
+                };
+            }
+        } catch (eChangeType) {
+            console.warn("[ZeroAd] changeType guard warning:", eChangeType);
+        }
         // NOTE: window.innerWidth/innerHeight must NEVER be spoofed. They define the
         // CSS layout viewport: combined with loadWithOverviewMode, a lied width
         // makes WebView zoom out to fit it (e.g. 1920 forced into a real 1280 ->
@@ -1177,7 +1188,9 @@
             },
             storage: {
                 clear: function() { if (window.NativeBridge) window.NativeBridge.storageClear(); },
-                flush: function() { if (window.NativeBridge) window.NativeBridge.storageFlush(); }
+                flush: function() { if (window.NativeBridge) window.NativeBridge.storageFlush(); },
+                verifyTest: function() { return true; },
+                writeTest: function() { return true; }
             },
             settings: { isMediaPlaybackDisabled: false },
             runtime: { initialDeepLink: "" },

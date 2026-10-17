@@ -37,6 +37,10 @@ class TVWebView @JvmOverloads constructor(
         setLayerType(View.LAYER_TYPE_HARDWARE, null)
         setBackgroundColor(0xFF000000.toInt())
 
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            setRendererPriorityPolicy(RENDERER_PRIORITY_BOUND, false)
+        }
+
         isFocusable = true
         isFocusableInTouchMode = true
         requestFocus()

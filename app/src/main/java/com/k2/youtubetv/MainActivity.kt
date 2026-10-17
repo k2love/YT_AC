@@ -36,6 +36,13 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            window.attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+        window.decorView.setOnApplyWindowInsetsListener { _, insets ->
+            insets.consumeSystemWindowInsets()
+        }
         hideSystemUI()
 
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -124,6 +131,13 @@ class MainActivity : AppCompatActivity() {
         hideSystemUI()
         binding.webView.onResume()
         router.syncAuthService.reportSavedCredentialIfValid()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            hideSystemUI()
+        }
     }
 
     override fun onPause() {
