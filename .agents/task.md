@@ -1,32 +1,26 @@
-# 작업 진행 상황 (Task Board)
+# 작업 보드: YouTube TV 순정 플레이어 HUD 비주얼 완전 복원 및 UI 밀림 방지
 
 ## 목표
-1. **플레이어 설정(톱니바퀴) -> '동영상 속도' 메뉴에서 2.0x 초과 배속(2.25x ~ 4x) UI 노출 및 스크롤 잠금 해제**:
-   - 가상 리스트(`yt-virtual-list` / `mH`)의 위치 배열 메모이제이션 고착을 우회하고 스냅샷을 14개로 갱신하여 2.0x 아래로 리모컨 방향키 스크롤 보장.
-2. **플레이어 속도 클램프 완전 해제 (최대 4.0x 허용)**:
-   - 메뉴에서 2.25x ~ 4x 선택 시 플레이어 내부 `NF` 클램프와 `oBf` 가용 배속 필터에 의해 2.0x로 절삭되지 않고 선택한 배속으로 즉시 전환 보장.
-3. **현재 배속 라디오 버튼 선택 상태 동기화 및 OSD 배지 실시간 연동**.
+1. 상단 영상 제목 및 컨트롤 툴팁 문자 설명(채널, 이전, 다음, 좋아요, 싫어요, 댓글, 질문하기, 저장, Super Thanks, 자막, 설정)의 검은 박스 완전 제거 및 투명 배경 복원
+2. 간헐적으로 전체 UI가 TV 상단 밖으로 200px 이상 밀려 올라가는 현상 원천 차단
 
 ---
 
-## 작업 목록
+## 작업 단계
 
-- [x] **1. 수술적 코드 수정**
-  - [x] `app/src/main/java/com/k2/youtubetv/webview/TVWebViewClient.kt`:
-    - `PATCH_VERSION`: 3 -> 5 (웹뷰 캐시 완전 무효화)
-    - `NF` 클램프 상한선 4.0x 패치 (`F=Math.max(4,F[F[v[l^3812]]-1]);a<=G||(a>=F?G=F:`)
-    - `oBf.filter` 가용 배속 상한선 4.0x 패치 (`var L=N.jW,g=Math.max(4,N.Cj||2);return oBf.filter(...)`)
-    - `oBf` 배속 사다리에 `2.25` 및 `2.75` 추가 (`oBf=s1f.concat([2.25,2.5,2.75,3,3.5,4])`)
-  - [x] `app/src/main/assets/h5vcc_polyfill.js`:
-    - `k2ExpandSpeedItemsInArray`: 2.0x 초과 배속 활성화 시 라디오 버튼 상태(`RADIO_BUTTON_CHECKED`) 정밀 동기화
-    - `k2ExpandLiveSpeedMenu`: 가상 리스트 인스턴스(`vInst.j`)의 메모이제이션 우회(`G = B`) 및 스냅샷 갱신(`vInst.A()`)
-- [x] **2. 빌드 및 배포**
-  - [x] Gradle 빌드: `.\gradlew.bat assembleDebug` 성공
-  - [x] TV 기기 설치 및 실행: `adb install -r YT_TV_AC.apk` (`192.168.100.121:5555`)
-- [x] **3. 실제 TV 실시간 검증 (사용자 입회 검증 완료)**
-  - [x] 설정(톱니바퀴) -> 동영상 속도 진입 후 2.0x 아래로 스크롤하여 2.25x ~ 4x 항목 노출 및 스크롤 확인
-  - [x] 메뉴에서 4x 선택 시 4.0x로 배속 변경 및 OSD 배지 노출 확인 (사용자 직접 확인 및 성공 승인)
-  - [x] 메뉴에서 1x(일반) 복귀 및 리모컨 Ch+/Ch- 단계별 양방향 속도 제어 정상 동작 확인
-- [x] **4. 문서화 및 버전 관리**
-  - [x] `.agents/walkthrough_unlock_menu_speed_4x_and_vlist_scroll_20261017.md` 작성
-  - [x] Git commit & push
+### 1차: HUD 및 툴팁 문자 설명 투명화
+- [x] 계획서 작성 (`.agents/implementation_plan_pure_hud_transparency_20261017.md`)
+- [x] 소스 코드 수술적 정밀 수정 (`h5vcc_polyfill.js`, `TVWebViewClient.kt` PATCH_VERSION 7)
+- [x] 릴리즈 v1.0.3 빌드 및 실기 설치
+- [x] 결과 리포트 작성 (`.agents/walkthrough_pure_hud_transparency_20261017.md`)
+
+### 2차: UI 상단 200px 밀림(Shift) 현상 원천 차단
+- [x] 원인 분석 및 계획서 작성 (`.agents/implementation_plan_prevent_ui_shift_20261017.md`)
+  - Android WebView 네이티브 스크롤 오프셋 발생 차단 (`scrollTo(0,0)`, `overScrollMode = NEVER`)
+  - Window SoftInput 패닝 차단 (`android:windowSoftInputMode="adjustNothing|stateAlwaysHidden"`)
+  - DOM/클래스 리플로우 유발 요소 정리 (`purgeQualityRoot` 및 `qualityObserver` 제거)
+  - `PATCH_VERSION = 8` 상향
+- [x] 소스 코드 수술적 정밀 수정 (`TVWebView.kt`, `AndroidManifest.xml`, `h5vcc_polyfill.js`, `TVWebViewClient.kt`)
+- [x] 릴리즈 빌드 (`.\gradlew.bat assembleRelease` 성공)
+- [x] 실기 TV 설치 및 단일 스크린샷 검증 (`verified_ui_pos.png`)
+- [x] 결과 리포트 작성 (`.agents/walkthrough_prevent_ui_shift_20261017.md`)

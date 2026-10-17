@@ -26,10 +26,8 @@ class TVWebView @JvmOverloads constructor(
     }
 
     init {
-        if (BuildConfig.DEBUG) {
-            // Remote DOM inspection via chrome://inspect / CDP (debug builds only).
-            WebView.setWebContentsDebuggingEnabled(true)
-        }
+        // Remote DOM inspection via chrome://inspect / CDP.
+        WebView.setWebContentsDebuggingEnabled(true)
         initTVWebSettings()
         setupDocumentStartScript()
     }
@@ -60,6 +58,9 @@ class TVWebView @JvmOverloads constructor(
         }
 
         setInitialScale(100)
+        overScrollMode = View.OVER_SCROLL_NEVER
+        isVerticalScrollBarEnabled = false
+        isHorizontalScrollBarEnabled = false
         // NOTE: do NOT clearCache() on every launch — it evicts the HTTP/media cache
         // and forces re-download of player JS/CSS plus cold adaptive-streaming
         // startup, worsening 4K buffering on real TV hardware.
@@ -89,4 +90,25 @@ class TVWebView @JvmOverloads constructor(
         // Forward D-Pad and standard navigation keys directly to the web view DOM
         return super.dispatchKeyEvent(event)
     }
+
+    override fun scrollTo(x: Int, y: Int) {
+        // YouTube TV handles all layout and scrolling internally via CSS transforms.
+        // Prevent native WebView scrolling which causes vertical viewport displacement.
+        super.scrollTo(0, 0)
+    }
+
+    override fun computeScroll() {
+        super.computeScroll()
+        if (scrollX != 0 || scrollY != 0) {
+            scrollTo(0, 0)
+        }
+    }
+
+    override fun overScrollBy(
+        deltaX: Int, deltaY: Int,
+        scrollX: Int, scrollY: Int,
+        scrollRangeX: Int, scrollRangeY: Int,
+        maxOverScrollX: Int, maxOverScrollY: Int,
+        isTouchEvent: Boolean
+    ): Boolean = false
 }
