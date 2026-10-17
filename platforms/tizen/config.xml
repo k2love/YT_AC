@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets" 
+        xmlns:tizen="http://tizen.org/ns/widgets" 
+        id="http://k2love.github.io/youtubetv" 
+        version="1.0.4" 
+        viewmodes="maximized">
+    <tizen:application id="Xk6j8K9d2L.YouTubeTVAC" 
+                       package="Xk6j8K9d2L" 
+                       type="capp" 
+                       required_version="3.0"/>
+    <content src="index.html"/>
+    <feature name="http://tizen.org/feature/screen.size.all"/>
+    <icon src="icon.png"/>
+    <name>YouTube TV AC</name>
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
+    <tizen:profile name="tv"/>
+    <tizen:setting screen-orientation="landscape" 
+                   context-menu="enable" 
+                   background-support="disable" 
+                   encryption="disable" 
+                   install-location="auto"/>
+    <!-- Allow full access to YouTube and media streaming endpoints -->
+    <access origin="https://www.youtube.com" subdomains="true"/>
+    <access origin="https://*.googlevideo.com" subdomains="true"/>
+    <access origin="https://*.ytimg.com" subdomains="true"/>
+    <access origin="https://*.google.com" subdomains="true"/>
+    <access origin="https://*.youtube-nocookie.com" subdomains="true"/>
+    <access origin="*" subdomains="true"/>
+</widget>

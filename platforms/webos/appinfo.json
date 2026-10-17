@@ -1,0 +1,17 @@
+{
+    "id": "com.k2.youtubetv.webos",
+    "version": "1.0.4",
+    "vendor": "k2love",
+    "type": "web",
+    "main": "index.html",
+    "title": "YouTube TV AC",
+    "icon": "icon.png",
+    "largeIcon": "largeIcon.png",
+    "resolution": "1920x1080",
+    "handlesRelaunch": true,
+    "supportGpuProcess": true,
+    "disableBackHistoryAPI": true,
+    "trustExternalMappings": true,
+    "allowThirdPartyCookies": true,
+    "uiRevision": 2
+}
